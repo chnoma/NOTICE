@@ -42,7 +42,7 @@ class MainWindow(QtWidgets.QMainWindow):
         super(MainWindow, self).__init__()
         uic.loadUi('./ui/main.ui', self)
         self.show()
-        self.shelve = shelve.open("./settings/registry.db")
+        self.shelve = shelve.open("./settings/registry")
         self.snowModel = QStandardItemModel()
         self.snowModel.setHorizontalHeaderLabels(["Project/Name", "Type", "Date"])
         root = self.snowModel.invisibleRootItem()
