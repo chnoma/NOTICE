@@ -1,17 +1,26 @@
 import pandas as pd
 
-
 # region Constants
 SITE_DETAILS = pd.read_excel("./settings/SiteList.xlsx")
 SITE_DETAILS.set_index("Station#", inplace=True)
+
+
 # endregion
 
 
-def jam(d):  # If string is None or nan, return ""
+def jam(d, return_value=""):  # If string is None or nan, return ""
     o = str(d)
     if o == "None" or o == "nan":
-        return ""
+        return return_value
     return o
+
+
+def jam_int(d, return_value=0):
+    try:
+        d = int(d)
+    except ValueError:
+        return return_value
+    return d
 
 
 def code_to_site(site_code, area):

@@ -7,5 +7,6 @@
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="module" module-name="emailer" />
+    <orderEntry type="module" module-name="NVOICE - v2" />
   </component>
 </module>

@@ -165,7 +165,7 @@
               </widget>
              </item>
              <item>
-              <widget class="QComboBox" name="comboBox">
+              <widget class="QComboBox" name="shipment_project">
                <property name="minimumSize">
                 <size>
                  <width>200</width>
@@ -241,7 +241,7 @@
              <item>
               <widget class="QLineEdit" name="facilityNameLineEdit">
                <property name="enabled">
-                <bool>true</bool>
+                <bool>false</bool>
                </property>
               </widget>
              </item>
@@ -259,7 +259,7 @@
              <item>
               <widget class="QLineEdit" name="manufacturerLineEdit">
                <property name="enabled">
-                <bool>true</bool>
+                <bool>false</bool>
                </property>
                <property name="text">
                 <string>HP</string>
@@ -280,7 +280,7 @@
              <item>
               <widget class="QLineEdit" name="procurementLineEdit">
                <property name="enabled">
-                <bool>true</bool>
+                <bool>false</bool>
                </property>
               </widget>
              </item>
@@ -299,7 +299,11 @@
               </widget>
              </item>
              <item>
-              <widget class="QPlainTextEdit" name="emailTextEdit"/>
+              <widget class="QPlainTextEdit" name="emailTextEdit">
+               <property name="enabled">
+                <bool>false</bool>
+               </property>
+              </widget>
              </item>
             </layout>
            </item>
@@ -316,7 +320,11 @@
               </widget>
              </item>
              <item>
-              <widget class="QPlainTextEdit" name="oitTextEdit"/>
+              <widget class="QPlainTextEdit" name="oitTextEdit">
+               <property name="enabled">
+                <bool>false</bool>
+               </property>
+              </widget>
              </item>
             </layout>
            </item>
@@ -335,7 +343,7 @@
              <item>
               <widget class="QPlainTextEdit" name="addressLineEdit">
                <property name="enabled">
-                <bool>true</bool>
+                <bool>false</bool>
                </property>
               </widget>
              </item>
@@ -370,7 +378,7 @@
            </spacer>
           </item>
           <item>
-           <widget class="QPushButton" name="saveButton">
+           <widget class="QPushButton" name="shipment_save">
             <property name="enabled">
              <bool>false</bool>
             </property>
