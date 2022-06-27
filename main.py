@@ -1,3 +1,4 @@
+import datetime
 import sys
 import os
 import shutil
@@ -44,15 +45,16 @@ class Shipment:
 
 @dataclass
 class DataEntry:
-    """Class detailing information about a given shipment notification/missing dn entry"""
+    """Dataclass detailing information about a given shipment notification/missing dn entry"""
     project: int
+    excel_file: str
+    pdf_file: str
     title: str
     type: int
     email_generated: bool
-    site_code: int
     date_added: date
     date_sent: date
-    data: list  # shipment notification: 0 - XLSX, 1 - PDF | DN Request: array of shipment dataclasses
+    data: list  # shipment notification: ShipmentNotification instance | DN Request: array of shipment dataclasses
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -65,10 +67,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.snowModel = QStandardItemModel()
         self.snowModel.setHorizontalHeaderLabels(["Project/Name", "Type", "Date"])
         root = self.snowModel.invisibleRootItem()
-        root.appendRow([QStandardItem("Supporting Technologies")])
-        root.appendRow([QStandardItem("PVaaS")])
-        root.appendRow([QStandardItem("Specialized Devices")])
-        root.appendRow([QStandardItem("Other")])
+        for project in PROJECT_NAMES:
+            root.appendRow([QStandardItem(project)])
 
         self.snowTreeView.setModel(self.snowModel)
         self.snowTreeView.header().setDefaultSectionSize(200)
@@ -86,10 +86,25 @@ class MainWindow(QtWidgets.QMainWindow):
         self.shipment_save.pressed.connect(self.save_shipment)
 
     def save_shipment(self):
-        filename = self.shipmentLineEdit.text()
-        project = self.shipment_project.currentText()
-        shipment = excelreader.parse_shipment_notification(filename)
-        if project == PROJECT_NAMES[PROJECT_PVAAS] and re.search("SCTASK", shipment.order_number) is None:
+        excel_filename = self.shipmentLineEdit.text()
+        pdf_filename = self.purchaseOrderLineEdit.text()
+
+        shipment = excelreader.parse_shipment_notification(excel_filename)
+
+        entry = DataEntry(
+            project=self.shipment_project.currentIndex(),
+            excel_file=QFileInfo(excel_filename).fileName(),
+            pdf_file=QFileInfo(pdf_filename).fileName(),
+            title=shipment.order_number,
+            type=TYPE_SHIPMENT,
+            email_generated=False,
+            date_added=datetime.datetime.now(),
+            date_sent=None,
+            data=shipment
+        )
+
+        if PROJECT_NAMES[entry.project] == PROJECT_NAMES[PROJECT_PVAAS] \
+                and re.search("SCTASK", entry.data.order_number) is None:
             message = QMessageBox()
             message.setIcon(QMessageBox.Question)
             message.setWindowTitle("No SCTASK Found For PVaaS")
@@ -97,8 +112,10 @@ class MainWindow(QtWidgets.QMainWindow):
             no SCTASK was found in the shipping notification.\n
             Are you sure you would like to continue adding this to PVaaS?""")  # FIX FORMATTING HERE
             message.exec()
+
+        new_item_folder = f"./files/{PROJECT_NAMES[entry.project]}/{entry.data.order_number}/"
         try:
-            os.makedirs(f"./files/{project}/{shipment.order_number}/")
+            os.makedirs(new_item_folder)
         except Exception as e:
             message = QMessageBox()
             message.setIcon(QMessageBox.Warning)
@@ -106,17 +123,22 @@ class MainWindow(QtWidgets.QMainWindow):
             message.setText(getattr(e, 'message', repr(e)))
             message.exec()
             return
-        # shutil.copy(self.purchaseOrderLineEdit.text(), "./files/"+newTaskFolder+"/PVaaS "+shortPurchaseOrderName+".pdf")
-        # shutil.copy(self.shipmentLineEdit.text(), "./files/"+newTaskFolder+"/"+shipment["name"]+".xlsx")
-        # excelreader.generateSerialList("./files/" + newTaskFolder + "/" + shipment["name"] + ".xlsx")
-        # self.purchaseOrderLineEdit.setText("")
-        # self.shipmentLineEdit.setText("")
-        # self.reloadTasks()
-        # message = QMessageBox()
-        # message.setIcon(QMessageBox.Information)
-        # message.setWindowTitle("Task Created")
-        # message.setText('Task "'+newTaskFolder+'" created successfully.')
-        # message.exec()
+
+        shutil.copy(pdf_filename, new_item_folder+entry.pdf_file)
+        shutil.copy(excel_filename, f"{new_item_folder}{entry.data.order_number}.xlsx")
+        wb = excelreader.generateSerialList(f"{new_item_folder}{entry.data.order_number}.xlsx")  # Generate one-page serial report
+        wb.save(f"{new_item_folder}{entry.data.order_number}_SN.xlsx")  # Save the report to disk
+
+        self.purchaseOrderLineEdit.setText("")
+        self.shipmentLineEdit.setText("")
+
+        self.shelve["data_entries"].append(entry)
+
+        message = QMessageBox()
+        message.setIcon(QMessageBox.Information)
+        message.setWindowTitle("Item Created")
+        message.setText(f'New item "{entry.data.order_number}" created in {PROJECT_NAMES[entry.project]}.')
+        message.exec()
 
     def close(self):
         self.shelve.close()

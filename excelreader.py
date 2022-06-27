@@ -44,13 +44,13 @@ class ShipmentNotification:
     shipments: list
 
 
-def parse_shipment_notification(file):
+def parse_shipment_notification(file_name):
     """
     Parses the given shipment notification file
     Returns a ShipmentNotification instance containing
         all necessary information about the shipment notification
     """
-    df = pd.read_excel(file)
+    df = pd.read_excel(file_name)
 
     order_number = ""
     match = re.search(r'SCTASK(\d+)', df["Unnamed: 0"][0])
@@ -176,14 +176,11 @@ def parse_shipment_notification(file):
 #     return sites
 #
 #
-# def generateSerialList(file):
-#     qfile = QFileInfo(file)
-#     os.makedirs(qfile.path() + "/SERIAL/", exist_ok=True)
-#     newFileName = qfile.path() + "/SERIAL/PVaas_SN_" + qfile.fileName()[:-5] + ".xlsx"
-#     shutil.copy(file, newFileName)
-#     workbook = openpyxl.load_workbook(newFileName)
-#     del workbook["Shipment"]
-#     workbook.save(newFileName)
+def generateSerialList(file):
+    qfile = QFileInfo(file)
+    workbook = openpyxl.load_workbook(file)
+    del workbook["Shipment"]
+    return workbook
 #
 #
 # def undefinedSite():
