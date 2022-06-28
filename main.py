@@ -18,9 +18,8 @@ import excelreader
 from helper_functions import code_to_site
 
 # region Constants
-
-
 SHELVE_FILENAME = "./settings/registry"
+IFCAP_PO_FOLDER = "./settings/IFCAP PO/"
 PROJECT_SUPPORTING_TECH = 0
 PROJECT_PVAAS = 1
 PROJECT_SPECIALIZED_DEVICES = 3
@@ -33,8 +32,10 @@ PROJECT_NAMES = ["Supporting Technologies",
 ENTRY_TYPE_SHIPMENT = 0
 ENTRY_TYPE_DN_REQUEST = 1
 NODE_TYPES = ["Notification", "Request"]
-
-
+STATE_NEW_TASK = 0
+STATE_NEW_DN_REQUEST = 1
+STATE_SHIPPING_NOTIFICATION_LOADED = 2
+STATE_DN_REQUEST_LOADED = 3
 # endregion
 
 
@@ -79,6 +80,22 @@ class MainWindow(QtWidgets.QMainWindow):
         uic.loadUi('./ui/main.ui', self)
         self.show()
 
+        # Load available IFCAP POs
+        self.po_projects = []
+        for i in range(len(PROJECT_NAMES)):
+            self.po_projects.append([])
+        os.makedirs(IFCAP_PO_FOLDER, exist_ok=True)
+        for file in os.listdir(IFCAP_PO_FOLDER):
+            fileinfo = QFileInfo(file)
+            info = fileinfo.fileName().split(";")
+            if fileinfo.isDir() or len(info) < 4:  # File is directory or improperly formatted name
+                continue
+            try:
+                self.po_projects[int(info[0])].append((info[1], info[2], fileinfo.absoluteFilePath()))
+            except (ValueError, KeyError):
+                continue
+
+        self.selected_entry = None
         with shelve.open(SHELVE_FILENAME) as db:
             if "data_entries" not in db:
                 db["data_entries"] = []
@@ -91,13 +108,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.reload_items()
 
         self.snowTreeView.selectionModel().selectionChanged.connect(self.tree_view_selection_changed)
-        self.purchaseOrderBrowseButton.pressed.connect(self.browse_po)
-        self.purchaseOrderOpenButton.pressed.connect(self.open_po)
         self.shipmentBrowseButton.pressed.connect(self.browse_xlsx)
         self.shipmentOpenButton.pressed.connect(self.open_xlsx)
-        self.purchaseOrderLineEdit.textChanged.connect(self.validate_files)
         self.shipmentLineEdit.textChanged.connect(self.validate_files)
-        self.shipment_save.pressed.connect(self.save_shipment)
+        self.save_cancel_button.pressed.connect(self.save_shipment)
+        self.shipment_project.activated.connect(self.project_selected)
+
+        self.set_application_state(STATE_NEW_TASK)
 
     def reload_items(self):
         self.snowModel.clear()
@@ -122,7 +139,11 @@ class MainWindow(QtWidgets.QMainWindow):
                                     QStandardItem(date.strftime(entry.date_added, "%m/%d/%Y"))])
                     hash(hash(str(root.child(root.rowCount() - 1))))
                     self.listed_data_entries[hash(str(root.child(root.rowCount() - 1)))] = entry
-                    print('@: ' + str(entry.data.station_number))
+
+    def project_selected(self):
+        self.po_combobox.clear()
+        for purchase_order in self.po_projects[self.shipment_project.currentIndex()]:
+            self.po_combobox.addItem(f"{purchase_order[0]}: {purchase_order[1]}")
 
     def save_shipment(self):
         excel_filename = self.shipmentLineEdit.text()
@@ -185,23 +206,76 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         found = False
         index = selected.indexes()[0]
+        selection = index.model().itemFromIndex(index)
         while index.parent().isValid():
-            selection = index.model().itemFromIndex(index)
             if hash(str(selection)) in self.listed_data_entries:
                 found = True
                 break
             child = index
             index = index.parent()
+            selection = index.model().itemFromIndex(index)
         if not found:
             return
         self.load_data_entry(self.listed_data_entries[hash(str(selection))])
 
     def load_data_entry(self, data_entry):
+        self.selected_entry = data_entry
+        self.shipment_order_number.setText(data_entry.data.order_number)
         if data_entry.type == ENTRY_TYPE_SHIPMENT:
-            site = code_to_site(data_entry.data.station_number, data_entry.data.va_facility)
-            print(site)
+            try:
+                site = code_to_site(data_entry.data.station_number, data_entry.data.va_facility)
+            except KeyError:
+                pass  # Implement proper handling here
+            self.stationLineEdit.setText(data_entry.data.station_number)
+            self.addressLineEdit.setPlainText(site["Area"] + "\n"
+                                              + site["Shipping Address"] + "\n"
+                                              + f"{site['Shipping City']}, {site['Shipping State']} {site['Shipping Zip Code']}")
+            self.facilityNameLineEdit.setText(site["Area"])
+            self.oitTextEdit.setPlainText(site["E-mail Distribution List for OIT"])
+            self.emailTextEdit.setPlainText(site["E-mail Distribution List for Logistics"])
+
+            file_folder = f"./files/{PROJECT_NAMES[data_entry.project]}/{data_entry.data.order_number}/"
+            excel_file = QFileInfo(file_folder+data_entry.excel_file).absoluteFilePath()
+            pdf_file = QFileInfo(file_folder+data_entry.pdf_file).absoluteFilePath()
+
+            self.shipmentLineEdit.setText(excel_file)
+            self.shipment_project.setCurrentIndex(data_entry.project)
+            self.po_projects.clear()
+            self.po_combobox.addItem(QFileInfo(pdf_file).fileName())
+
+            self.set_application_state(STATE_SHIPPING_NOTIFICATION_LOADED)
+
         else:
             pass
+
+    def set_application_state(self, state):
+        edit_mode = False
+        if state == STATE_NEW_TASK:
+            self.save_cancel_button.setText("Save As New Entry")
+        elif state == STATE_SHIPPING_NOTIFICATION_LOADED:
+            self.save_cancel_button.setText("Close Shipping Notification")
+            self.tab_view.setCurrentWidget(self.shipment_tab)
+            self.tab_view.setTabEnabled(1, False)
+            edit_mode = True
+        elif state == STATE_DN_REQUEST_LOADED:
+            self.save_cancel_button.setText("Close Shipping Notification Request")
+            self.tab_view.setCurrentWidget(self.shipment_tab)
+            self.tab_view.setTabEnabled(1, False)
+            edit_mode = True
+        self.shipment_project.setEnabled(not edit_mode)
+        self.shipmentBrowseButton.setEnabled(not edit_mode)
+        self.shipmentOpenButton.setEnabled(not edit_mode)
+        self.shipmentLineEdit.setEnabled(not edit_mode)
+        self.po_combobox.setEnabled(not edit_mode)
+        self.save_cancel_button.setEnabled(edit_mode)
+        self.addressLineEdit.setEnabled(edit_mode)
+        self.facilityNameLineEdit.setEnabled(edit_mode)
+        self.oitTextEdit.setEnabled(edit_mode)
+        self.emailTextEdit.setEnabled(edit_mode)
+        self.shipment_generate_email.setEnabled(edit_mode)
+        self.manufacturerLineEdit.setEnabled(edit_mode)
+        self.procurementLineEdit.setEnabled(edit_mode)
+
     #     task = self.tasks[selection.row() + child.row()]
     #     if task.station in self.sites.keys():
     #         site = self.sites[task.station]
@@ -219,8 +293,9 @@ class MainWindow(QtWidgets.QMainWindow):
     #     self.shipmentLineEdit.setText(task.shipmentFile)
 
     def validate_files(self):
-        self.shipment_save.setEnabled(
-            os.path.exists(self.purchaseOrderLineEdit.text()) and os.path.exists(self.shipmentLineEdit.text()))
+        self.save_cancel_button.setEnabled(
+            os.path.exists(self.shipmentLineEdit.text()) and
+            os.path.exists(self.po_projects[self.shipment_project.currentIndex()][self.po_combobox.currentIndex()][3]))
 
     def browse_po(self):
         file = QFileDialog.getOpenFileName(self, "QFileDialog.getOpenFileName()", "", "Purchase Orders (*.pdf)")[0]
