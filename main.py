@@ -16,8 +16,7 @@ from PyQt5.QtCore import QFileInfo
 import excelreader
 
 # region Constants
-TYPE_SHIPMENT = 0
-TYPE_DN_REQUEST = 1
+SHELVE_FILENAME = "./settings/registry"
 PROJECT_SUPPORTING_TECH = 0
 PROJECT_PVAAS = 1
 PROJECT_SPECIALIZED_DEVICES = 3
@@ -26,6 +25,9 @@ PROJECT_NAMES = ["Supporting Technologies",
                  "PVaaS",
                  "Specialized Devices",
                  "Other"]
+# These variables are purely for code readability
+TYPE_SHIPMENT = 0
+TYPE_DN_REQUEST = 1
 # endregion
 
 
@@ -53,8 +55,15 @@ class DataEntry:
     type: int
     email_generated: bool
     date_added: date
-    date_sent: date
     data: list  # shipment notification: ShipmentNotification instance | DN Request: array of shipment dataclasses
+    alive: bool = True
+    date_sent: date = None
+    row: int = 0
+
+    def group_node_index(self):
+        if self.alive:
+            return 0
+        return 1
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -64,18 +73,15 @@ class MainWindow(QtWidgets.QMainWindow):
         uic.loadUi('./ui/main.ui', self)
         self.show()
 
+        with shelve.open(SHELVE_FILENAME) as db:
+            if "data_entries" not in db:
+                db["data_entries"] = []
+
         self.snowModel = QStandardItemModel()
-        self.snowModel.setHorizontalHeaderLabels(["Project/Name", "Type", "Date"])
-        root = self.snowModel.invisibleRootItem()
-        for project in PROJECT_NAMES:
-            root.appendRow([QStandardItem(project)])
-
+        self.roots = []
         self.snowTreeView.setModel(self.snowModel)
-        self.snowTreeView.header().setDefaultSectionSize(200)
-
-        self.shelve = shelve.open("./settings/registry")
-        if "data_entries" not in self.shelve.keys():
-            self.shelve["data_entries"] = []
+        self.snowTreeView.header().setDefaultSectionSize(120)
+        self.reload_items()
 
         self.purchaseOrderBrowseButton.pressed.connect(self.browse_po)
         self.purchaseOrderOpenButton.pressed.connect(self.open_po)
@@ -84,6 +90,31 @@ class MainWindow(QtWidgets.QMainWindow):
         self.purchaseOrderLineEdit.textChanged.connect(self.validate_files)
         self.shipmentLineEdit.textChanged.connect(self.validate_files)
         self.shipment_save.pressed.connect(self.save_shipment)
+
+    def reload_items(self):
+        self.snowModel.clear()
+        self.snowModel.setHorizontalHeaderLabels(["Project/Name", "Type", "Date", "Status"])
+        root = self.snowModel.invisibleRootItem()
+        self.roots = {}
+
+        for project in PROJECT_NAMES:
+            root.appendRow([QStandardItem(project), QStandardItem("Project")])
+            self.roots[project] = root.child(root.rowCount() - 1)
+
+        for key in self.roots:
+            root = self.roots[key]
+            root.appendRow([QStandardItem("Active"), QStandardItem("Group")])
+            root.appendRow([QStandardItem("Inactive"), QStandardItem("Group")])
+
+        with shelve.open(SHELVE_FILENAME) as db:
+            for entry in db["data_entries"]:
+                if entry.type == TYPE_SHIPMENT:
+                    pass
+                    root = self.roots[PROJECT_NAMES[entry.project]].child(entry.group_node_index())
+                    root.appendRow([QStandardItem(entry.data.order_number), QStandardItem("Shipping Notification"),
+                                    QStandardItem(date.strftime(entry.date_added, "%m/%d/%Y"))])
+                else:
+                    pass  # Add DN Request Handling
 
     def save_shipment(self):
         excel_filename = self.shipmentLineEdit.text()
@@ -99,7 +130,6 @@ class MainWindow(QtWidgets.QMainWindow):
             type=TYPE_SHIPMENT,
             email_generated=False,
             date_added=datetime.datetime.now(),
-            date_sent=None,
             data=shipment
         )
 
@@ -124,24 +154,23 @@ class MainWindow(QtWidgets.QMainWindow):
             message.exec()
             return
 
-        shutil.copy(pdf_filename, new_item_folder+entry.pdf_file)
+        shutil.copy(pdf_filename, new_item_folder + entry.pdf_file)
         shutil.copy(excel_filename, f"{new_item_folder}{entry.data.order_number}.xlsx")
-        wb = excelreader.generateSerialList(f"{new_item_folder}{entry.data.order_number}.xlsx")  # Generate one-page serial report
+        wb = excelreader.generateSerialList(
+            f"{new_item_folder}{entry.data.order_number}.xlsx")  # Generate one-page serial report
         wb.save(f"{new_item_folder}{entry.data.order_number}_SN.xlsx")  # Save the report to disk
 
         self.purchaseOrderLineEdit.setText("")
         self.shipmentLineEdit.setText("")
-
-        self.shelve["data_entries"].append(entry)
+        with shelve.open(SHELVE_FILENAME, writeback=True) as db:
+            db["data_entries"].append(entry)
+        self.reload_items()
 
         message = QMessageBox()
         message.setIcon(QMessageBox.Information)
         message.setWindowTitle("Item Created")
         message.setText(f'New item "{entry.data.order_number}" created in {PROJECT_NAMES[entry.project]}.')
         message.exec()
-
-    def close(self):
-        self.shelve.close()
 
     def validate_files(self):
         self.shipment_save.setEnabled(

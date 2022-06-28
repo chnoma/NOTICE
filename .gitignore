@@ -1,4 +1,3 @@
-/settings/registry.bak
-/settings/registry.dat
-/settings/registry.dir
+/settings/registry*
 /samples/
+/files/

@@ -53,7 +53,7 @@ def parse_shipment_notification(file_name):
     df = pd.read_excel(file_name)
 
     order_number = ""
-    match = re.search(r'SCTASK(\d+)', df["Unnamed: 0"][0])
+    match = re.search(r"SCTASK(\d+)", df["Unnamed: 0"][0])
     if match is not None:
         order_number = match.group(0)
 
