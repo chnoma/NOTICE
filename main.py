@@ -4,6 +4,7 @@ import os
 import shutil
 import re
 import shelve
+import typing
 
 from datetime import date
 from dataclasses import dataclass
@@ -26,8 +27,11 @@ PROJECT_NAMES = ["Supporting Technologies",
                  "Specialized Devices",
                  "Other"]
 # These variables are purely for code readability
-TYPE_SHIPMENT = 0
-TYPE_DN_REQUEST = 1
+ENTRY_TYPE_SHIPMENT = 0
+ENTRY_TYPE_DN_REQUEST = 1
+NODE_TYPES = ["Notification", "Request"]
+
+
 # endregion
 
 
@@ -58,7 +62,6 @@ class DataEntry:
     data: list  # shipment notification: ShipmentNotification instance | DN Request: array of shipment dataclasses
     alive: bool = True
     date_sent: date = None
-    row: int = 0
 
     def group_node_index(self):
         if self.alive:
@@ -79,10 +82,12 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.snowModel = QStandardItemModel()
         self.roots = []
+        self.listed_data_entries = {}
         self.snowTreeView.setModel(self.snowModel)
         self.snowTreeView.header().setDefaultSectionSize(120)
         self.reload_items()
 
+        self.snowTreeView.selectionModel().selectionChanged.connect(self.taskSelectionChanged)
         self.purchaseOrderBrowseButton.pressed.connect(self.browse_po)
         self.purchaseOrderOpenButton.pressed.connect(self.open_po)
         self.shipmentBrowseButton.pressed.connect(self.browse_xlsx)
@@ -100,7 +105,6 @@ class MainWindow(QtWidgets.QMainWindow):
         for project in PROJECT_NAMES:
             root.appendRow([QStandardItem(project), QStandardItem("Project")])
             self.roots[project] = root.child(root.rowCount() - 1)
-
         for key in self.roots:
             root = self.roots[key]
             root.appendRow([QStandardItem("Active"), QStandardItem("Group")])
@@ -108,13 +112,13 @@ class MainWindow(QtWidgets.QMainWindow):
 
         with shelve.open(SHELVE_FILENAME) as db:
             for entry in db["data_entries"]:
-                if entry.type == TYPE_SHIPMENT:
-                    pass
+                if entry.type == ENTRY_TYPE_SHIPMENT:
                     root = self.roots[PROJECT_NAMES[entry.project]].child(entry.group_node_index())
-                    root.appendRow([QStandardItem(entry.data.order_number), QStandardItem("Shipping Notification"),
+                    root.appendRow([QStandardItem(entry.data.order_number),
+                                    QStandardItem(NODE_TYPES[entry.type]),
                                     QStandardItem(date.strftime(entry.date_added, "%m/%d/%Y"))])
-                else:
-                    pass  # Add DN Request Handling
+                    hash(hash(str(root.child(root.rowCount() - 1))))
+                    self.listed_data_entries[hash(str(root.child(root.rowCount() - 1)))] = entry
 
     def save_shipment(self):
         excel_filename = self.shipmentLineEdit.text()
@@ -127,7 +131,7 @@ class MainWindow(QtWidgets.QMainWindow):
             excel_file=QFileInfo(excel_filename).fileName(),
             pdf_file=QFileInfo(pdf_filename).fileName(),
             title=shipment.order_number,
-            type=TYPE_SHIPMENT,
+            type=ENTRY_TYPE_SHIPMENT,
             email_generated=False,
             date_added=datetime.datetime.now(),
             data=shipment
@@ -171,6 +175,39 @@ class MainWindow(QtWidgets.QMainWindow):
         message.setWindowTitle("Item Created")
         message.setText(f'New item "{entry.data.order_number}" created in {PROJECT_NAMES[entry.project]}.')
         message.exec()
+
+    def taskSelectionChanged(self, selected):
+        if len(selected.indexes()) <= 1:
+            return
+        found = False
+        index = selected.indexes()[0]
+        while index.parent().isValid():
+            selection = index.model().itemFromIndex(index)
+            if hash(str(selection)) in self.listed_data_entries:
+                found = True
+                break
+            child = index
+            index = index.parent()
+        if not found:
+            return
+        self.load_data_entry(self.listed_data_entries[hash(str(selection))])
+
+    # def load_data_entry(self, data_entry):
+    #     task = self.tasks[selection.row() + child.row()]
+    #     if task.station in self.sites.keys():
+    #         site = self.sites[task.station]
+    #     else:
+    #         site = excelreader.undefinedSite()
+    #     self.selectedTask = task
+    #     self.stationLineEdit.setText(task.station)
+    #     self.addressLineEdit.setPlainText(task.facility+"\n"+task.address+"\n"+task.city+", "
+    #                                       +task.state+" "+task.zip)
+    #     self.facilityNameLineEdit.setText(site["facility_name"])
+    #     self.oitTextEdit.setPlainText(site["OIT_emails"])
+    #     self.emailTextEdit.setPlainText(site["logistics_emails"])
+    #     self.procurementLineEdit.setText(task.purchaseOrder)
+    #     self.purchaseOrderLineEdit.setText(task.purchaseOrderFile)
+    #     self.shipmentLineEdit.setText(task.shipmentFile)
 
     def validate_files(self):
         self.shipment_save.setEnabled(
