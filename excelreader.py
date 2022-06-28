@@ -42,6 +42,8 @@ class ShipmentLine:
 class ShipmentNotification:
     order_number: str
     shipments: list
+    station_number: str
+    va_facility: str
 
 
 def parse_shipment_notification(file_name):
@@ -58,20 +60,28 @@ def parse_shipment_notification(file_name):
         order_number = match.group(0)
 
     alt_order_number = ""
+    sn_station_number = ""
+    sn_va_facility = ""
     shipments = []
     for i in range(5, len(df["Unnamed: 0"])):
         new_order_number = jam(df["Unnamed: 16"][i])
+        station_number = jam(df["Unnamed: 3"][i])
+        va_facility = jam(df["Unnamed: 7"][i])
         if alt_order_number == "" and new_order_number != "":  # if no SCTASK is found, use the first non-blank order #
             alt_order_number = new_order_number
+        if sn_va_facility == "" and va_facility != "":  # set shipment notification va facility to first non-blank
+            sn_va_facility = va_facility
+        if sn_station_number == "" and station_number != "":  # set shipment notification location code to first non-blank
+            sn_station_number = station_number
         new_shipment = ShipmentLine(
             district=jam(df["Unnamed: 0"][i]),
             d_t=jam(df["Unnamed: 1"][i]),
             location_code=jam(df["Unnamed: 2"][i]),
-            station_number=jam(df["Unnamed: 3"][i]),
+            station_number=station_number,
             shipping_address=jam(df["Unnamed: 4"][i]),
             city=jam(df["Unnamed: 5"][i]),
             state=jam(df["Unnamed: 6"][i]),
-            va_facility=jam(df["Unnamed: 7"][i]),
+            va_facility=va_facility,
             zip_code=jam(df["Unnamed: 8"][i]),
             tracking_number=jam(df["Unnamed: 9"][i]),
             sku=jam(df["Unnamed: 10"][i]),
@@ -86,47 +96,7 @@ def parse_shipment_notification(file_name):
     if order_number == "":
         order_number = alt_order_number
 
-    return ShipmentNotification(order_number, shipments)
-
-
-# def readShipmentFile(file):
-#     shipmentInfo = {}
-#     workbook = openpyxl.load_workbook(file)
-#     shipments = []
-#     sheet_obj = workbook["Shipment"]
-#     offset = 6
-#     entryCount = 0
-#     while (True):
-#         if sheet_obj.cell(entryCount + offset, 4).value == None:
-#             break
-#         entryCount += 1
-#     for i in range(0, entryCount):
-#         shipment = {}
-#         shipment["district"] = sheet_obj.cell(i + offset, 1).value
-#         shipment["d-t"] = sheet_obj.cell(i + offset, 2).value
-#         shipment["location"] = sheet_obj.cell(i + offset, 3).value
-#         shipment["station"] = sheet_obj.cell(i + offset, 4).value
-#         shipment["address"] = sheet_obj.cell(i + offset, 5).value
-#         shipment["city"] = sheet_obj.cell(i + offset, 6).value
-#         shipment["state"] = sheet_obj.cell(i + offset, 7).value
-#         shipment["va_facility"] = sheet_obj.cell(i + offset, 8).value
-#         shipment["zip"] = sheet_obj.cell(i + offset, 9).value
-#         shipment["trackingNumber"] = sheet_obj.cell(i + offset, 10).value
-#         shipment["sku"] = sheet_obj.cell(i + offset, 11).value
-#         shipment["description"] = sheet_obj.cell(i + offset, 12).value
-#         shipment["clin"] = sheet_obj.cell(i + offset, 13).value
-#         shipment["qty"] = sheet_obj.cell(i + offset, 14).value
-#         shipment["service_tag"] = sheet_obj.cell(i + offset, 15).value
-#         shipment["po"] = sheet_obj.cell(i + offset, 16).value
-#         shipment["order"] = sheet_obj.cell(i + offset, 17).value
-#         shipment["ship_date"] = sheet_obj.cell(i + offset, 18).value
-#         shipments.append(shipment)
-#     shipmentInfo["shipments"] = shipments
-#     shipmentInfo["name"] = sheet_obj.cell(2, 1).value[7:]
-#     shipmentInfo["date"] = sheet_obj.cell(2, 1).value[-10:]
-#     print(shipmentInfo["date"])
-#     shipmentInfo["name"] = shipmentInfo["name"][:shipmentInfo["name"].find(" -")]
-#     return shipmentInfo
+    return ShipmentNotification(order_number, shipments, sn_station_number, sn_va_facility)
 
 #
 # def readItemList(file):
@@ -154,45 +124,13 @@ def parse_shipment_notification(file_name):
 #         item["record"] = sheet_obj.cell(i + offset, 11).value == "Yes"
 #         items.append(item)
 #     return items
-#
-#
-# def readSiteList(file):
-#     workbook = openpyxl.load_workbook(file)
-#     sheet_obj = workbook.active
-#     sites = {}
-#     offset = 1
-#     entryCount = 0
-#     while (True):
-#         if sheet_obj.cell(entryCount + offset, 1).value == None:
-#             break
-#         entryCount += 1
-#     for i in range(0, entryCount):
-#         site = {}
-#         site["station"] = sheet_obj.cell(i + offset, 1).value
-#         site["facility_name"] = sheet_obj.cell(i + offset, 2).value
-#         site["logistics_emails"] = sheet_obj.cell(i + offset, 3).value
-#         site["OIT_emails"] = sheet_obj.cell(i + offset, 4).value
-#         sites[site["station"]] = site
-#     return sites
-#
-#
+
 def generateSerialList(file):
     qfile = QFileInfo(file)
     workbook = openpyxl.load_workbook(file)
     del workbook["Shipment"]
     return workbook
-#
-#
-# def undefinedSite():
-#     undefText = "Undefined - please add this site to site_list.xlsx in the config folder"
-#     site = {}
-#     site["station"] = undefText
-#     site["facility_name"] = undefText
-#     site["logistics_emails"] = undefText
-#     site["OIT_emails"] = undefText
-#     return site
-#
-#
+
 # def undefinedItem():
 #     undefText = "Undefined Item"
 #     item = {}

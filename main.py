@@ -15,8 +15,11 @@ from PyQt5.QtWidgets import QFileDialog, QMessageBox
 from PyQt5.QtCore import QFileInfo
 
 import excelreader
+from helper_functions import code_to_site
 
 # region Constants
+
+
 SHELVE_FILENAME = "./settings/registry"
 PROJECT_SUPPORTING_TECH = 0
 PROJECT_PVAAS = 1
@@ -87,7 +90,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.snowTreeView.header().setDefaultSectionSize(120)
         self.reload_items()
 
-        self.snowTreeView.selectionModel().selectionChanged.connect(self.taskSelectionChanged)
+        self.snowTreeView.selectionModel().selectionChanged.connect(self.tree_view_selection_changed)
         self.purchaseOrderBrowseButton.pressed.connect(self.browse_po)
         self.purchaseOrderOpenButton.pressed.connect(self.open_po)
         self.shipmentBrowseButton.pressed.connect(self.browse_xlsx)
@@ -119,6 +122,7 @@ class MainWindow(QtWidgets.QMainWindow):
                                     QStandardItem(date.strftime(entry.date_added, "%m/%d/%Y"))])
                     hash(hash(str(root.child(root.rowCount() - 1))))
                     self.listed_data_entries[hash(str(root.child(root.rowCount() - 1)))] = entry
+                    print('@: ' + str(entry.data.station_number))
 
     def save_shipment(self):
         excel_filename = self.shipmentLineEdit.text()
@@ -176,7 +180,7 @@ class MainWindow(QtWidgets.QMainWindow):
         message.setText(f'New item "{entry.data.order_number}" created in {PROJECT_NAMES[entry.project]}.')
         message.exec()
 
-    def taskSelectionChanged(self, selected):
+    def tree_view_selection_changed(self, selected):
         if len(selected.indexes()) <= 1:
             return
         found = False
@@ -192,7 +196,12 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         self.load_data_entry(self.listed_data_entries[hash(str(selection))])
 
-    # def load_data_entry(self, data_entry):
+    def load_data_entry(self, data_entry):
+        if data_entry.type == ENTRY_TYPE_SHIPMENT:
+            site = code_to_site(data_entry.data.station_number, data_entry.data.va_facility)
+            print(site)
+        else:
+            pass
     #     task = self.tasks[selection.row() + child.row()]
     #     if task.station in self.sites.keys():
     #         site = self.sites[task.station]
