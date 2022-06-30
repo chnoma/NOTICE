@@ -1,10 +1,16 @@
 import pandas as pd
+import configparser
 
 # region Constants
-SITE_DETAILS = pd.read_excel("./settings/SiteList.xlsx")
+SITE_DETAILS = pd.read_excel("./settings/site_list.xlsx")
 SITE_DETAILS.set_index("Station#", inplace=True)
+ITEM_DETAILS = pd.read_excel("./settings/item_list.xlsx")
 
-
+config = configparser.ConfigParser()
+config.read("./settings/keys.cfg")
+ITEM_DETAILS.set_index("Description", inplace=True)
+API_KEY = config["DEFAULT"]["api_key"]
+SECRET_KEY = config["DEFAULT"]["secret_key"]
 # endregion
 
 

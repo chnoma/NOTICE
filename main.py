@@ -9,12 +9,16 @@ import typing
 from datetime import date
 from dataclasses import dataclass
 
+import fedex_api
 from PyQt5 import QtWidgets, uic
 from PyQt5.QtGui import QStandardItem, QStandardItemModel
 from PyQt5.QtWidgets import QFileDialog, QMessageBox
 from PyQt5.QtCore import QFileInfo
 
+import win32com.client
+
 import excelreader
+import helper_functions
 from helper_functions import code_to_site
 
 # region Constants
@@ -82,6 +86,8 @@ class MainWindow(QtWidgets.QMainWindow):
         uic.loadUi('./ui/main.ui', self)
         self.show()
         self.state = None
+
+        self.fedex = fedex_api.FedexAPI(helper_functions.API_KEY, helper_functions.SECRET_KEY)
 
         # Load available IFCAP POs
         self.po_projects = []
@@ -306,22 +312,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.manufacturerLineEdit.setEnabled(edit_mode)
         self.procurementLineEdit.setEnabled(edit_mode)
 
-    #     task = self.tasks[selection.row() + child.row()]
-    #     if task.station in self.sites.keys():
-    #         site = self.sites[task.station]
-    #     else:
-    #         site = excelreader.undefinedSite()
-    #     self.selectedTask = task
-    #     self.stationLineEdit.setText(task.station)
-    #     self.shipment_address_text_edit.setPlainText(task.facility+"\n"+task.address+"\n"+task.city+", "
-    #                                       +task.state+" "+task.zip)
-    #     self.facilityNameLineEdit.setText(site["facility_name"])
-    #     self.oitTextEdit.setPlainText(site["OIT_emails"])
-    #     self.emailTextEdit.setPlainText(site["logistics_emails"])
-    #     self.procurementLineEdit.setText(task.purchaseOrder)
-    #     self.purchaseOrderLineEdit.setText(task.purchaseOrderFile)
-    #     self.shipmentLineEdit.setText(task.shipmentFile)
-
     def validate_files(self):
         print("AAAAAAAAA")
         try:
@@ -356,6 +346,99 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         else:
             os.system('"' + self.shipmentLineEdit.text() + '"')
+
+    def generateEmail(self, task):
+        itemQuantities = {}
+        for shipment in self.selectedTask.items:
+            for item in self.selectedTask.items[shipment]:
+                includedItems = self.getItem(item["clin"])["included"];
+                if includedItems != None:
+                    for subitem in self.getItem(item["clin"])["included"].split(";"):
+                        if self.getItem(subitem) != excelreader.undefinedItem():
+                            if subitem not in itemQuantities.keys():
+                                itemQuantities[subitem] = 0
+                            itemQuantities[subitem] += 1
+                if item["clin"] not in itemQuantities.keys():
+                    itemQuantities[item["clin"] ] = 0
+                itemQuantities[item["clin"] ] += 1
+        with open("config/emailTemplate.htm") as fin:
+            body = fin.read()
+        body = body.replace("%FACILITY%", self.facilityNameLineEdit.text())
+        body = body.replace("%SUBJECT%", self.procurementLineEdit.text())
+        body = body.replace("%PO%", QFileInfo(self.selectedTask.purchaseOrderFile).fileName())
+        body = body.replace("%OIT%", self.oitTextEdit.toPlainText())
+        body = body.replace("%ADDRESS%", self.addressLineEdit.toPlainText().replace("\n", "<br/>"))
+        body = body.replace("%TABLECAPTION%", "IFCAP " + self.selectedTask.purchaseOrder
+                            + " - Manufacturer: " + self.manufacturerLineEdit.text() + ", "
+                            + "Vendor: Colossal")
+        itemTableIndex = body.find("<!-- RECORD ITEMS -->")
+        for key in itemQuantities.keys():
+            item = self.getItem(key)
+            if item["model"] == "Undefined Item" or not item["record"]:
+                continue
+            rowString =f"""
+            <tr>
+            <td>{item["model"]}</td>
+            <td>{item["csn"]}</td>
+            <td>{item["manufacturer_name"]}</td>
+            <td>{item["equipment_category"]}</td>
+            <td>{item["cost"]}</td>
+            <td>{item["warranty"]}</td>
+            <td>{str(itemQuantities[key])}</td>
+            </tr>"""
+            body = body[:itemTableIndex]+rowString+body[itemTableIndex:]
+            itemTableIndex+=len(rowString)
+        itemTableIndex = body.find("<!-- NON RECORD ITEMS -->")
+        foundNonRecordItems = False
+        for key in itemQuantities.keys():
+            item = self.getItem(key)
+            if item["clin"] == "Undefined Item" or item["record"]:
+                continue
+            foundNonRecordItems = True
+            rowString ="<h3>[%s]   -   %s</h3>"%(str(itemQuantities[key]), item["description"])
+            body = body[:itemTableIndex]+rowString+body[itemTableIndex:]
+            itemTableIndex+=len(rowString)
+        outlook = win32com.client.Dispatch("outlook.application")
+        itemTableIndex = body.find("<!-- TRACKING NUMBERS -->")
+        trackDate = date(1970, 1, 1)
+        invalidTracking = False
+        packages = {}
+        for key in self.selectedTask.items.keys():
+            body = body[:itemTableIndex]+str(key)+"<br/>"+body[itemTableIndex:]
+            trackingResult = self.fedexApi.trackbynumber(key)
+            if not trackingResult.isValid:
+                invalidTracking = True
+                continue
+            if trackingResult.deliveryDate > trackDate:
+                trackDate = trackingResult.deliveryDate
+            if trackingResult.packageType not in packages.keys():
+                packages[trackingResult.packageType] = 0
+            packages[trackingResult.packageType] += trackingResult.quantity
+            itemTableIndex+=len(key)
+        itemTableIndex = body.find("<!-- PACKAGES -->")
+        for key in packages.keys():
+            rowString ="""
+            <tr>
+                <td style="background-color:#d9e1f2;"><b><u>%s</u><b></td>
+                <td>%s</td>
+            </tr>
+            """%(key, str(packages[key]))
+            body = body[:itemTableIndex]+rowString+body[itemTableIndex:]
+            itemTableIndex+=len(rowString)
+        if invalidTracking:
+            body = '<h3 style="color:red; background-color:yellow;">Some tracking information could not be automatically obtained - please manually enter/verify.</h3><br/>\n'+body
+        body = body.replace("%DELIVERDATE%", trackDate.strftime("%A, %B %d, %Y"))
+        if not foundNonRecordItems:
+            body = body[:body.find("<!-- NON RECORD TEXT -->")]
+        outlook = win32com.client.Dispatch("outlook.application")
+        mail = outlook.CreateItem(0)
+        mail.To = self.emailTextEdit.toPlainText()
+        mail.Subject = "Shipment Notification: " + self.selectedTask.purchaseOrder + " ["+self.selectedTask.shipments["name"]+ "] to " + self.facilityNameLineEdit.text()
+        mail.HtmlBody = body
+        mail.Attachments.Add(QFileInfo(self.selectedTask.purchaseOrderFile).absoluteFilePath())
+        mail.Attachments.Add(QFileInfo(self.selectedTask.folderName).absoluteFilePath()+"/SERIAL/PVaaS_SN_"+task.shipments["name"]+".xlsx")
+        mail.Save()
+        mail.Display(False)
 
 
 if __name__ == "__main__":
