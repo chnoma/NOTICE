@@ -342,7 +342,7 @@
                 </widget>
                </item>
                <item>
-                <widget class="QPlainTextEdit" name="addressLineEdit">
+                <widget class="QPlainTextEdit" name="shipment_address_text_edit">
                  <property name="enabled">
                   <bool>false</bool>
                  </property>
