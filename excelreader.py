@@ -18,6 +18,30 @@ from helper_functions import jam, jam_int
 
 
 @dataclass
+class Item:
+    model: str
+    csn: str
+    manufacturer_name: str
+    equipment_category: str
+    cost: str
+    warranty: str
+    record: bool
+
+
+ITEM_DETAILS = pd.read_excel("./settings/item_list.xlsx")
+ITEMS = {}
+for k, v in enumerate(ITEM_DETAILS["Description"]):
+    new_item = Item(model=jam(ITEM_DETAILS["Model"][k]),
+                    csn=jam(ITEM_DETAILS["CSN"][k]),
+                    manufacturer_name=jam(ITEM_DETAILS["Manufacturer Equipment Name"][k]),
+                    equipment_category=jam(ITEM_DETAILS["Equipment Category"][k]),
+                    cost=jam(ITEM_DETAILS["Cost"][k]),
+                    warranty=jam(ITEM_DETAILS["Warranty"][k]),
+                    record=(jam(ITEM_DETAILS["Record in Inventory"][k]).lower() == "yes"))
+    ITEMS[v] = new_item
+
+
+@dataclass
 class ShipmentLine:
     district: str
     d_t: str
@@ -63,11 +87,12 @@ def parse_shipment_notification(file_name):
     sn_station_number = ""
     sn_va_facility = ""
     shipments = []
-    for i in range(5, len(df["Unnamed: 0"])):
+    for i in range(4, len(df["Unnamed: 0"])):
         new_order_number = jam(df["Unnamed: 16"][i])
         station_number = jam(df["Unnamed: 3"][i])
         va_facility = jam(df["Unnamed: 7"][i])
         if alt_order_number == "" and new_order_number != "":  # if no SCTASK is found, use the first non-blank order #
+            print(alt_order_number)
             alt_order_number = new_order_number
         if sn_va_facility == "" and va_facility != "":  # set shipment notification va facility to first non-blank
             sn_va_facility = va_facility
@@ -97,6 +122,7 @@ def parse_shipment_notification(file_name):
         order_number = alt_order_number
 
     return ShipmentNotification(order_number, shipments, sn_station_number, sn_va_facility)
+
 
 #
 # def readItemList(file):

@@ -124,6 +124,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.po_combobox.activated.connect(self.validate_files)
         self.shipment_project.activated.connect(self.project_selected)
         self.save_cancel_button.pressed.connect(self.save_cancel_pressed)
+        self.shipment_generate_email.pressed.connect(self.generate_email)
 
         self.set_application_state(STATE_NEW_TASK)
 
@@ -173,7 +174,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         entry = DataEntry(
             project=self.shipment_project.currentIndex(),
-            excel_file=QFileInfo(excel_filename).fileName(),
+            excel_file=f"{shipment.order_number}.xlsx",
             pdf_file=QFileInfo(pdf_filename).fileName(),
             title=shipment.order_number,
             type=ENTRY_TYPE_SHIPMENT,
@@ -184,23 +185,17 @@ class MainWindow(QtWidgets.QMainWindow):
 
         if PROJECT_NAMES[entry.project] == PROJECT_NAMES[PROJECT_PVAAS] \
                 and re.search("SCTASK", entry.data.order_number) is None:
-            message = QMessageBox()
-            message.setIcon(QMessageBox.Question)
-            message.setWindowTitle("No SCTASK Found For PVaaS")
-            message.setText("""Your 'Project' setting is set to PVaaS, but
-                    no SCTASK was found in the shipping notification.\n
-                    Are you sure you would like to continue adding this to PVaaS?""")  # FIX FORMATTING HERE
-            message.exec()
+            cont = QMessageBox.question(self, 'No SCTask Found',
+                                        'You have selected PVaaS, but no SCTask was located.\nWould you like to continue?',
+                                        QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if cont == QMessageBox.No:
+                return
 
         new_item_folder = f"./files/{PROJECT_NAMES[entry.project]}/{entry.data.order_number}/"
         try:
             os.makedirs(new_item_folder)
         except Exception as e:
-            message = QMessageBox()
-            message.setIcon(QMessageBox.Warning)
-            message.setWindowTitle("Exception")
-            message.setText(getattr(e, 'message', repr(e)))
-            message.exec()
+            QMessageBox.warning(self, 'Exception', getattr(e, 'message', repr(e)))
             return
 
         shutil.copy(pdf_filename, new_item_folder + entry.pdf_file)
@@ -220,7 +215,6 @@ class MainWindow(QtWidgets.QMainWindow):
         message.exec()
 
         self.set_application_state(STATE_NEW_TASK)
-        print("Saved?")
 
     def tree_view_selection_changed(self, selected):
         if len(selected.indexes()) <= 1:
@@ -246,10 +240,13 @@ class MainWindow(QtWidgets.QMainWindow):
                 site = code_to_site(data_entry.data.station_number, data_entry.data.va_facility)
             except KeyError:
                 pass  # Implement proper handling here
+            mod = self.selected_entry.pdf_file.split(';')[1]
+            ifcap_po = self.selected_entry.pdf_file.split(';')[2]
             self.stationLineEdit.setText(data_entry.data.station_number)
             self.shipment_address_text_edit.setPlainText(site["Area"] + "\n"
                                                          + site["Shipping Address"] + "\n"
                                                          + f"{site['Shipping City']}, {site['Shipping State']} {site['Shipping Zip Code']}")
+            self.procurementLineEdit.setText(f"{PROJECT_NAMES[self.selected_entry.project]} {mod} IFCAP PO# {ifcap_po} Shipment to {site['Area']}")
             self.facilityNameLineEdit.setText(site["Area"])
             self.oitTextEdit.setPlainText(site["E-mail Distribution List for OIT"])
             self.emailTextEdit.setPlainText(site["E-mail Distribution List for Logistics"])
@@ -313,13 +310,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.procurementLineEdit.setEnabled(edit_mode)
 
     def validate_files(self):
-        print("AAAAAAAAA")
         try:
-            print(self.po_projects[self.shipment_project.currentIndex()][self.po_combobox.currentIndex()][2])
-            print(os.path.exists(self.shipmentLineEdit.text()), os.path.exists(self.po_projects[self.shipment_project.currentIndex()][self.po_combobox.currentIndex()][2]))
             self.save_cancel_button.setEnabled(
                 os.path.exists(self.shipmentLineEdit.text()) and
-                os.path.exists(self.po_projects[self.shipment_project.currentIndex()][self.po_combobox.currentIndex()][2]))
+                os.path.exists(
+                    self.po_projects[self.shipment_project.currentIndex()][self.po_combobox.currentIndex()][2]))
         except IndexError:
             pass
 
@@ -347,96 +342,137 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             os.system('"' + self.shipmentLineEdit.text() + '"')
 
-    def generateEmail(self, task):
-        itemQuantities = {}
-        for shipment in self.selectedTask.items:
-            for item in self.selectedTask.items[shipment]:
-                includedItems = self.getItem(item["clin"])["included"];
-                if includedItems != None:
-                    for subitem in self.getItem(item["clin"])["included"].split(";"):
-                        if self.getItem(subitem) != excelreader.undefinedItem():
-                            if subitem not in itemQuantities.keys():
-                                itemQuantities[subitem] = 0
-                            itemQuantities[subitem] += 1
-                if item["clin"] not in itemQuantities.keys():
-                    itemQuantities[item["clin"] ] = 0
-                itemQuantities[item["clin"] ] += 1
-        with open("config/emailTemplate.htm") as fin:
+    def generate_email(self):
+        files_folder = f"./files/{PROJECT_NAMES[self.selected_entry.project]}/{self.selected_entry.data.order_number}/"
+        pdf_filename = QFileInfo(self.selected_entry.pdf_file).fileName()
+        oit_emails = self.oitTextEdit.toPlainText()
+        logistics_emails = self.emailTextEdit.toPlainText()
+        if re.search("included", oit_emails.lower()) is not None:
+            oit_emails = logistics_emails
+        if re.search("included", logistics_emails.lower()) is not None:
+            logistics_emails = oit_emails
+        mod = pdf_filename.split(';')[1]
+        ifcap_po = pdf_filename.split(';')[2]
+        attachment_name = f"{PROJECT_NAMES[self.selected_entry.project]} {mod} {ifcap_po}.pdf"
+
+        item_quantities = {}
+        for shipment in self.selected_entry.data.shipments:
+            if shipment.description not in item_quantities.keys():
+                item_quantities[shipment.description] = 0
+            item_quantities[shipment.description] += shipment.qty
+
+        with open(f"./settings/emailTemplate.htm") as fin:
             body = fin.read()
         body = body.replace("%FACILITY%", self.facilityNameLineEdit.text())
         body = body.replace("%SUBJECT%", self.procurementLineEdit.text())
-        body = body.replace("%PO%", QFileInfo(self.selectedTask.purchaseOrderFile).fileName())
-        body = body.replace("%OIT%", self.oitTextEdit.toPlainText())
-        body = body.replace("%ADDRESS%", self.addressLineEdit.toPlainText().replace("\n", "<br/>"))
-        body = body.replace("%TABLECAPTION%", "IFCAP " + self.selectedTask.purchaseOrder
+        body = body.replace("%PO%", attachment_name)
+        body = body.replace("%OIT%", oit_emails)
+        body = body.replace("%ADDRESS%", self.shipment_address_text_edit.toPlainText().replace("\n", "<br/>"))
+        body = body.replace("%TABLECAPTION%", "IFCAP " + ifcap_po
                             + " - Manufacturer: " + self.manufacturerLineEdit.text() + ", "
                             + "Vendor: Colossal")
-        itemTableIndex = body.find("<!-- RECORD ITEMS -->")
-        for key in itemQuantities.keys():
-            item = self.getItem(key)
-            if item["model"] == "Undefined Item" or not item["record"]:
+
+        found_non_record_items = False
+        found_record_items = False
+        item_table_index = body.find("<!-- RECORD ITEMS -->") + len("<!-- RECORD ITEMS -->")
+        for key in item_quantities.keys():
+            try:
+                item = excelreader.ITEMS[key]
+            except KeyError:
+                cont = QMessageBox.question(self, 'Item not found.',
+                                            f"Item '{key}' not found in the item or ignore spreadsheets."
+                                            "\n\nYou may add this item to the item list or ignore list to correct this issue."
+                                            "\nThis item will -not- be included in this email."
+                                            "\nWould you like to continue?",
+                                            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+                if cont == QMessageBox.No:
+                    return
                 continue
-            rowString =f"""
+            if not item.record:
+                found_non_record_items = True
+                continue
+            found_record_items = True
+            row_string = f"""
             <tr>
-            <td>{item["model"]}</td>
-            <td>{item["csn"]}</td>
-            <td>{item["manufacturer_name"]}</td>
-            <td>{item["equipment_category"]}</td>
-            <td>{item["cost"]}</td>
-            <td>{item["warranty"]}</td>
-            <td>{str(itemQuantities[key])}</td>
+            <td>{item.model}</td>
+            <td>{item.csn}</td>
+            <td>{item.manufacturer_name}</td>
+            <td>{item.equipment_category}</td>
+            <td>{item.cost}</td>
+            <td>{item.warranty}</td>
+            <td>{str(item_quantities[key])}</td>
             </tr>"""
-            body = body[:itemTableIndex]+rowString+body[itemTableIndex:]
-            itemTableIndex+=len(rowString)
-        itemTableIndex = body.find("<!-- NON RECORD ITEMS -->")
-        foundNonRecordItems = False
-        for key in itemQuantities.keys():
-            item = self.getItem(key)
-            if item["clin"] == "Undefined Item" or item["record"]:
-                continue
-            foundNonRecordItems = True
-            rowString ="<h3>[%s]   -   %s</h3>"%(str(itemQuantities[key]), item["description"])
-            body = body[:itemTableIndex]+rowString+body[itemTableIndex:]
-            itemTableIndex+=len(rowString)
-        outlook = win32com.client.Dispatch("outlook.application")
-        itemTableIndex = body.find("<!-- TRACKING NUMBERS -->")
-        trackDate = date(1970, 1, 1)
-        invalidTracking = False
+            body = body[:item_table_index] + row_string + body[item_table_index:]
+            item_table_index += len(row_string)
+
+        item_table_index = body.find("<!-- NON RECORD ITEMS -->") + len("<!-- NON RECORD ITEMS -->")
+
+        if found_non_record_items:
+            for key in item_quantities.keys():
+                try:
+                    item = excelreader.ITEMS[key]
+                except KeyError:
+                    continue
+                if item.record:
+                    continue
+                row_string = f'<h3 style="color:red; background-color:yellow;">[{str(item_quantities[key])}]   -   {key}</h3>'
+                body = body[:item_table_index] + row_string + body[item_table_index:]
+                item_table_index += len(row_string)
+
+        item_table_index = body.find("<!-- TRACKING NUMBERS -->")
+        track_date = date(1970, 1, 1)
+        invalid_tracking = False
         packages = {}
-        for key in self.selectedTask.items.keys():
-            body = body[:itemTableIndex]+str(key)+"<br/>"+body[itemTableIndex:]
-            trackingResult = self.fedexApi.trackbynumber(key)
-            if not trackingResult.isValid:
-                invalidTracking = True
+        processed_tracking_numbers = []
+        for shipment in self.selected_entry.data.shipments:
+            tracking_number = shipment.tracking_number
+            if tracking_number in processed_tracking_numbers:
                 continue
-            if trackingResult.deliveryDate > trackDate:
-                trackDate = trackingResult.deliveryDate
-            if trackingResult.packageType not in packages.keys():
-                packages[trackingResult.packageType] = 0
-            packages[trackingResult.packageType] += trackingResult.quantity
-            itemTableIndex+=len(key)
-        itemTableIndex = body.find("<!-- PACKAGES -->")
+            body = body[:item_table_index]+str(tracking_number)+"<br/>"+body[item_table_index:]
+            tracking_result = self.fedex.trackbynumber(tracking_number)
+            if not tracking_result.isValid:
+                invalid_tracking = True
+                continue
+            delivery_date = datetime.datetime.strptime(tracking_result.deliveryDate, "%m/%d/%Y").date()
+            if delivery_date > track_date:
+                track_date = delivery_date
+            if tracking_result.packageType not in packages.keys():
+                packages[tracking_result.packageType] = 0
+            packages[tracking_result.packageType] += tracking_result.quantity
+            processed_tracking_numbers.append(tracking_number)
+            item_table_index+=len(tracking_number+"<br/>")
+        item_table_index = body.find("<!-- PACKAGES -->")
         for key in packages.keys():
-            rowString ="""
+            row_string ="""
             <tr>
                 <td style="background-color:#d9e1f2;"><b><u>%s</u><b></td>
                 <td>%s</td>
             </tr>
             """%(key, str(packages[key]))
-            body = body[:itemTableIndex]+rowString+body[itemTableIndex:]
-            itemTableIndex+=len(rowString)
-        if invalidTracking:
+            body = body[:item_table_index]+row_string+body[item_table_index:]
+            item_table_index+=len(row_string)
+        if invalid_tracking:
             body = '<h3 style="color:red; background-color:yellow;">Some tracking information could not be automatically obtained - please manually enter/verify.</h3><br/>\n'+body
-        body = body.replace("%DELIVERDATE%", trackDate.strftime("%A, %B %d, %Y"))
-        if not foundNonRecordItems:
+        body = body.replace("%DELIVERDATE%", track_date.strftime("%A, %B %d, %Y"))
+
+        if not found_record_items:
+            body_start = body[:body.find("<!-- RECORD TABLE START -->")]
+            body_end = body[body.find("<!-- NON RECORD TEXT -->"):]
+            body = body_start + body_end
+
+        if not found_non_record_items:
             body = body[:body.find("<!-- NON RECORD TEXT -->")]
+
         outlook = win32com.client.Dispatch("outlook.application")
         mail = outlook.CreateItem(0)
-        mail.To = self.emailTextEdit.toPlainText()
-        mail.Subject = "Shipment Notification: " + self.selectedTask.purchaseOrder + " ["+self.selectedTask.shipments["name"]+ "] to " + self.facilityNameLineEdit.text()
+        mail.To = logistics_emails
+        mail.Subject = self.procurementLineEdit.text()
         mail.HtmlBody = body
-        mail.Attachments.Add(QFileInfo(self.selectedTask.purchaseOrderFile).absoluteFilePath())
-        mail.Attachments.Add(QFileInfo(self.selectedTask.folderName).absoluteFilePath()+"/SERIAL/PVaaS_SN_"+task.shipments["name"]+".xlsx")
+        shutil.copy(files_folder + self.selected_entry.pdf_file,
+                    files_folder + attachment_name)  # This seems a bit unnecessary, but this is the only way to rename an attachment
+        mail.Attachments.Add(QFileInfo(files_folder + attachment_name).absoluteFilePath())
+        os.remove(files_folder + attachment_name)  # See two lines above
+        mail.Attachments.Add(QFileInfo(files_folder + self.selected_entry.excel_file[:-5] + "_SN.xlsx").absoluteFilePath())
         mail.Save()
         mail.Display(False)
 
