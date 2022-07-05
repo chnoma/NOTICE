@@ -8,6 +8,7 @@ import typing
 
 from datetime import date
 from dataclasses import dataclass
+import difflib
 
 import fedex_api
 from PyQt5 import QtWidgets, uic
@@ -376,6 +377,14 @@ class MainWindow(QtWidgets.QMainWindow):
         found_record_items = False
         item_table_index = body.find("<!-- RECORD ITEMS -->") + len("<!-- RECORD ITEMS -->")
         for key in item_quantities.keys():
+            print(key)
+            ignore_key = False
+            for desc in excelreader.IGNORE_LIST["Description"]:  # if key in excelreader.IGNORE_LIST["Description"] was not working.
+                if key == desc:  # I do not understand why.
+                    ignore_key = True
+                    break
+            if ignore_key:
+                continue
             try:
                 item = excelreader.ITEMS[key]
             except KeyError:
@@ -425,6 +434,13 @@ class MainWindow(QtWidgets.QMainWindow):
         packages = {}
         processed_tracking_numbers = []
         for shipment in self.selected_entry.data.shipments:
+            ignore_key = False
+            for desc in excelreader.IGNORE_LIST["Description"]:  # if key in excelreader.IGNORE_LIST["Description"] was not working.
+                if shipment.description == desc:  # I do not understand why.
+                    ignore_key = True
+                    break
+            if ignore_key:
+                continue
             tracking_number = shipment.tracking_number
             if tracking_number in processed_tracking_numbers:
                 continue
@@ -455,12 +471,12 @@ class MainWindow(QtWidgets.QMainWindow):
             body = '<h3 style="color:red; background-color:yellow;">Some tracking information could not be automatically obtained - please manually enter/verify.</h3><br/>\n'+body
         body = body.replace("%DELIVERDATE%", track_date.strftime("%A, %B %d, %Y"))
 
-        if not found_record_items:
+        if not found_record_items:  # Remove record table if no record items
             body_start = body[:body.find("<!-- RECORD TABLE START -->")]
             body_end = body[body.find("<!-- NON RECORD TEXT -->"):]
             body = body_start + body_end
 
-        if not found_non_record_items:
+        if not found_non_record_items:  # Remove non-record section if no non-record items
             body = body[:body.find("<!-- NON RECORD TEXT -->")]
 
         outlook = win32com.client.Dispatch("outlook.application")

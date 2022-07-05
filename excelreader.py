@@ -28,7 +28,10 @@ class Item:
     record: bool
 
 
+IGNORE_LIST = pd.read_excel("./settings/ignore_list.xlsx")
+
 ITEM_DETAILS = pd.read_excel("./settings/item_list.xlsx")
+
 ITEMS = {}
 for k, v in enumerate(ITEM_DETAILS["Description"]):
     new_item = Item(model=jam(ITEM_DETAILS["Model"][k]),
@@ -39,6 +42,8 @@ for k, v in enumerate(ITEM_DETAILS["Description"]):
                     warranty=jam(ITEM_DETAILS["Warranty"][k]),
                     record=(jam(ITEM_DETAILS["Record in Inventory"][k]).lower() == "yes"))
     ITEMS[v] = new_item
+
+
 
 
 @dataclass
