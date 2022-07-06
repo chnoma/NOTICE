@@ -73,6 +73,7 @@ class DataEntry:
     data: list  # shipment notification: ShipmentNotification instance | DN Request: array of shipment dataclasses
     alive: bool = True
     date_sent: date = None
+    status = "Email not Generated"
 
     def group_node_index(self):
         if self.alive:
@@ -149,7 +150,8 @@ class MainWindow(QtWidgets.QMainWindow):
                     root = self.roots[PROJECT_NAMES[entry.project]].child(entry.group_node_index())
                     root.appendRow([QStandardItem(entry.data.order_number),
                                     QStandardItem(NODE_TYPES[entry.type]),
-                                    QStandardItem(date.strftime(entry.date_added, "%m/%d/%Y"))])
+                                    QStandardItem(date.strftime(entry.date_added, "%m/%d/%Y")),
+                                    QStandardItem(entry.status)])
                     hash(hash(str(root.child(root.rowCount() - 1))))
                     self.listed_data_entries[hash(str(root.child(root.rowCount() - 1)))] = entry
 
