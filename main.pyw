@@ -298,6 +298,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if not edit_mode:
             self.po_combobox.clear()
             self.shipment_project.setCurrentIndex(0)
+            self.project_selected()
             self.shipmentLineEdit.setText("")
             self.facilityNameLineEdit.setText("")
             self.shipment_address_text_edit.setPlainText("")
