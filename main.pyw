@@ -377,7 +377,7 @@ class MainWindow(QtWidgets.QMainWindow):
         found_record_items = False
         item_table_index = body.find("<!-- RECORD ITEMS -->") + len("<!-- RECORD ITEMS -->")
         include_all_unknown_items = False
-        included_unkown_items = []
+        included_unknown_items = []
         for key in item_quantities.keys():
             print(key)
             ignore_key = False
@@ -404,7 +404,7 @@ class MainWindow(QtWidgets.QMainWindow):
                         include_all_unknown_items = True
                     elif cont == QMessageBox.No:
                         return
-                included_unkown_items.append(key)
+                included_unknown_items.append(key)
                 item = excelreader.Item(key, "", "", "", "", "", False)
 
             if not item.record:
@@ -433,7 +433,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     if item.record:
                         continue
                 except KeyError:
-                    if key not in included_unkown_items:
+                    if key not in included_unknown_items:
                         continue
                 row_string = f'<h3 style="color:red; background-color:yellow;">[{str(item_quantities[key])}]   -   {key}</h3>'
                 body = body[:item_table_index] + row_string + body[item_table_index:]
