@@ -466,6 +466,7 @@ class MainWindow(QtWidgets.QMainWindow):
             if tracking_number in processed_tracking_numbers:
                 continue
             body = body[:item_table_index] + str(tracking_number) + "<br/>" + body[item_table_index:]
+            processed_tracking_numbers.append(tracking_number)
             tracking_result = self.fedex.track_by_number(tracking_number)
             if not tracking_result.is_valid:
                 invalid_tracking = True
@@ -476,7 +477,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 if tracking_result.package.type not in packages.keys():
                     packages[tracking_result.package.type] = 0
                 packages[tracking_result.package.type] += tracking_result.package.count
-            processed_tracking_numbers.append(tracking_number)
             item_table_index += len(tracking_number + "<br/>")
         item_table_index = body.find("<!-- PACKAGES -->")
         for key in packages.keys():
