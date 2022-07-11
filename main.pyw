@@ -1,9 +1,11 @@
 import datetime
 import os
+import random
 import re
 import shelve
 import shutil
 import sys
+import string
 from dataclasses import dataclass
 from datetime import date
 from pytz import UTC as utc
@@ -68,6 +70,7 @@ class DataEntry:
     email_generated: bool
     date_added: date
     data: list  # shipment notification: ShipmentNotification instance | DN Request: array of shipment dataclasses
+    unique_id: str
     alive: bool = True
     date_sent: date = None
     status = "Email not Generated"
@@ -179,7 +182,8 @@ class MainWindow(QtWidgets.QMainWindow):
             type=ENTRY_TYPE_SHIPMENT,
             email_generated=False,
             date_added=datetime.datetime.now(),
-            data=shipment
+            data=shipment,
+            unique_id=''.join(random.choice(string.printable) for i in range(0, 128))
         )
 
         if PROJECT_NAMES[entry.project] == PROJECT_NAMES[PROJECT_PVAAS] \
@@ -380,9 +384,9 @@ class MainWindow(QtWidgets.QMainWindow):
         for key in item_quantities.keys():
             print(key)
             ignore_key = False
-            for desc in excelreader.IGNORE_LIST[
-                "Description"]:  # if key in excelreader.IGNORE_LIST["Description"] was not working.
-                if key == desc:  # I do not understand why.
+            # if key in excelreader.IGNORE_LIST["Description"] was not working. Not sure why at this time.
+            for desc in excelreader.IGNORE_LIST["Description"]:
+                if key == desc:
                     ignore_key = True
                     break
             if ignore_key:
@@ -395,7 +399,7 @@ class MainWindow(QtWidgets.QMainWindow):
                                                 f"Item '{key}' not found in the item or ignore spreadsheets."
                                                 "\n\nYou may add this item to the item list or ignore list to correct this issue."
                                                 "\nWould you like to include this as a non-record item?",
-                                                QMessageBox.YesAll | QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel, QMessageBox.No)
+                                                QMessageBox.YesAll | QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel, QMessageBox.Yes)
                     if cont == QMessageBox.Yes:
                         pass
                     elif cont == QMessageBox.YesAll:
@@ -445,7 +449,6 @@ class MainWindow(QtWidgets.QMainWindow):
         packages = {}
         processed_tracking_numbers = []
         for shipment in self.selected_entry.data.shipments:
-            ignore_key = False
             for desc in excelreader.IGNORE_LIST["Description"]:  # if key in excelreader.IGNORE_LIST["Description"] was not working.
                 if shipment.description == desc:  # I do not understand why.
                     continue
