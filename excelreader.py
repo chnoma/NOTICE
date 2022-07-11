@@ -129,51 +129,8 @@ def parse_shipment_notification(file_name):
     return ShipmentNotification(order_number, shipments, sn_station_number, sn_va_facility)
 
 
-#
-# def readItemList(file):
-#     workbook = openpyxl.load_workbook(file)
-#     items = []
-#     sheet_obj = workbook.active
-#     offset = 2
-#     entryCount = 0
-#     while (True):
-#         if sheet_obj.cell(entryCount + offset, 1).value == None:
-#             break
-#         entryCount += 1
-#     for i in range(0, entryCount):
-#         item = {}
-#         item["contract"] = sheet_obj.cell(i + offset, 1).value
-#         item["clin"] = sheet_obj.cell(i + offset, 2).value
-#         item["description"] = sheet_obj.cell(i + offset, 3).value
-#         item["model"] = sheet_obj.cell(i + offset, 4).value
-#         item["csn"] = sheet_obj.cell(i + offset, 5).value
-#         item["manufacturer_name"] = sheet_obj.cell(i + offset, 6).value
-#         item["equipment_category"] = sheet_obj.cell(i + offset, 7).value
-#         item["cost"] = sheet_obj.cell(i + offset, 8).value
-#         item["warranty"] = sheet_obj.cell(i + offset, 9).value
-#         item["included"] = sheet_obj.cell(i + offset, 10).value
-#         item["record"] = sheet_obj.cell(i + offset, 11).value == "Yes"
-#         items.append(item)
-#     return items
-
 def generateSerialList(file):
     qfile = QFileInfo(file)
     workbook = openpyxl.load_workbook(file)
     del workbook["Shipment"]
     return workbook
-
-# def undefinedItem():
-#     undefText = "Undefined Item"
-#     item = {}
-#     item["contract"] = undefText
-#     item["clin"] = undefText
-#     item["description"] = undefText
-#     item["model"] = undefText
-#     item["csn"] = undefText
-#     item["manufacturer_name"] = undefText
-#     item["equipment_category"] = undefText
-#     item["record"] = False
-#     item["cost"] = undefText
-#     item["warranty"] = undefText
-#     item["included"] = ""
-#     return item

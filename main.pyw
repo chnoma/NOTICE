@@ -375,6 +375,7 @@ class MainWindow(QtWidgets.QMainWindow):
         found_non_record_items = False
         found_record_items = False
         item_table_index = body.find("<!-- RECORD ITEMS -->") + len("<!-- RECORD ITEMS -->")
+        include_all_unknown_items = False
         for key in item_quantities.keys():
             print(key)
             ignore_key = False
@@ -387,15 +388,21 @@ class MainWindow(QtWidgets.QMainWindow):
             try:
                 item = excelreader.ITEMS[key]
             except KeyError:
-                cont = QMessageBox.question(self, 'Item not found.',
-                                            f"Item '{key}' not found in the item or ignore spreadsheets."
-                                            "\n\nYou may add this item to the item list or ignore list to correct this issue."
-                                            "\nThis item will -not- be included in this email."
-                                            "\nWould you like to continue?",
-                                            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-                if cont == QMessageBox.No:
-                    return
-                continue
+                if not include_all_unknown_items:
+                    cont = QMessageBox.question(self, 'Item not found.',
+                                                f"Item '{key}' not found in the item or ignore spreadsheets."
+                                                "\n\nYou may add this item to the item list or ignore list to correct this issue."
+                                                "\nThis item will be included as a non-record item."
+                                                "\nWould you like to continue?",
+                                                QMessageBox.YesAll | QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+                    if cont == QMessageBox.Yes:
+                        pass
+                    elif cont == QMessageBox.YesAll:
+                        include_all_unknown_items = True
+                    elif cont == QMessageBox.No:
+                        return
+                item = excelreader.Item(key, "", "", "", "", "", False)
+
             if not item.record:
                 found_non_record_items = True
                 continue
