@@ -395,14 +395,15 @@ class MainWindow(QtWidgets.QMainWindow):
                     cont = QMessageBox.question(self, 'Item not found.',
                                                 f"Item '{key}' not found in the item or ignore spreadsheets."
                                                 "\n\nYou may add this item to the item list or ignore list to correct this issue."
-                                                "\nThis item will be included as a non-record item."
-                                                "\nWould you like to continue?",
-                                                QMessageBox.YesAll | QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+                                                "\nWould you like to include this as a non-record item?",
+                                                QMessageBox.YesAll | QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel, QMessageBox.No)
                     if cont == QMessageBox.Yes:
                         pass
                     elif cont == QMessageBox.YesAll:
                         include_all_unknown_items = True
                     elif cont == QMessageBox.No:
+                        continue
+                    elif cont == QMessageBox.Cancel:
                         return
                 included_unknown_items.append(key)
                 item = excelreader.Item(key, "", "", "", "", "", False)
@@ -448,9 +449,8 @@ class MainWindow(QtWidgets.QMainWindow):
             ignore_key = False
             for desc in excelreader.IGNORE_LIST["Description"]:  # if key in excelreader.IGNORE_LIST["Description"] was not working.
                 if shipment.description == desc:  # I do not understand why.
-                    ignore_key = True
-                    break
-            if ignore_key:
+                    continue
+            if shipment.description not in excelreader.ITEMS and shipment.description not in included_unknown_items:
                 continue
             tracking_number = shipment.tracking_number
             if tracking_number in processed_tracking_numbers:
