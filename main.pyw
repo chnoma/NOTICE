@@ -154,6 +154,13 @@ class MainWindow(QtWidgets.QMainWindow):
                                     QStandardItem(entry.status)])
                     self.listed_data_entries[hash(str(root.child(root.rowCount() - 1)))] = entry
 
+    def save_data_entry_changes(self):
+        with shelve.open(SHELVE_FILENAME, writeback=True) as db:
+            for k, entry in enumerate(db["data_entries"]):
+                if entry.unique_id == self.selected_entry.unique_id:
+                    print("UPDATED")
+                    db["data_entries"][k] = self.selected_entry
+
     def project_selected(self):
         self.po_combobox.clear()
         try:
@@ -505,6 +512,12 @@ class MainWindow(QtWidgets.QMainWindow):
             QFileInfo(files_folder + self.selected_entry.excel_file[:-5] + "_SN.xlsx").absoluteFilePath())
         mail.Save()
         mail.Display(True)
+        self.selected_entry.alive = False
+        self.selected_entry.status = "Email Generated"
+        self.selected_entry.date = datetime.datetime.now()
+        self.save_data_entry_changes()
+        self.set_application_state(STATE_NEW_TASK)
+        self.reload_items()
 
 
 if __name__ == "__main__":
