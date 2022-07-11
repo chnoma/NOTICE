@@ -7,6 +7,8 @@ Created on Sun Feb 13 21:28:21 2022
 
 import shutil
 import os
+import random
+import string
 import re
 from dataclasses import dataclass
 
@@ -98,7 +100,8 @@ def parse_shipment_notification(file_name):
         va_facility = jam(df["Unnamed: 7"][i])
         if alt_order_number == "" and new_order_number != "":  # if no SCTASK is found, use the first non-blank order #
             print(alt_order_number)
-            alt_order_number = new_order_number
+            # append 10 letter random string to order number
+            alt_order_number = new_order_number + ''.join(random.choice(string.ascii_letters) for i in range(0, 10))
         if sn_va_facility == "" and va_facility != "":  # set shipment notification va facility to first non-blank
             sn_va_facility = va_facility
         if sn_station_number == "" and station_number != "":  # set shipment notification location code to first non-blank
