@@ -149,7 +149,6 @@ class MainWindow(QtWidgets.QMainWindow):
                                     QStandardItem(NODE_TYPES[entry.type]),
                                     QStandardItem(date.strftime(entry.date_added, "%m/%d/%Y")),
                                     QStandardItem(entry.status)])
-                    hash(hash(str(root.child(root.rowCount() - 1))))
                     self.listed_data_entries[hash(str(root.child(root.rowCount() - 1)))] = entry
 
     def project_selected(self):
