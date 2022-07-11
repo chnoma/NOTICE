@@ -246,7 +246,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self.shipment_address_text_edit.setPlainText(site["Area"] + "\n"
                                                          + site["Shipping Address"] + "\n"
                                                          + f"{site['Shipping City']}, {site['Shipping State']} {site['Shipping Zip Code']}")
-            self.procurementLineEdit.setText(f"{PROJECT_NAMES[self.selected_entry.project]} {mod} IFCAP PO# {ifcap_po} Shipment to {site['Area']}")
+            self.procurementLineEdit.setText(
+                f"{PROJECT_NAMES[self.selected_entry.project]} {mod} IFCAP PO# {ifcap_po} Shipment to {site['Area']}")
             self.facilityNameLineEdit.setText(site["Area"])
             self.oitTextEdit.setPlainText(site["E-mail Distribution List for OIT"])
             self.emailTextEdit.setPlainText(site["E-mail Distribution List for Logistics"])
@@ -376,10 +377,12 @@ class MainWindow(QtWidgets.QMainWindow):
         found_record_items = False
         item_table_index = body.find("<!-- RECORD ITEMS -->") + len("<!-- RECORD ITEMS -->")
         include_all_unknown_items = False
+        included_unkown_items = []
         for key in item_quantities.keys():
             print(key)
             ignore_key = False
-            for desc in excelreader.IGNORE_LIST["Description"]:  # if key in excelreader.IGNORE_LIST["Description"] was not working.
+            for desc in excelreader.IGNORE_LIST[
+                "Description"]:  # if key in excelreader.IGNORE_LIST["Description"] was not working.
                 if key == desc:  # I do not understand why.
                     ignore_key = True
                     break
@@ -401,6 +404,7 @@ class MainWindow(QtWidgets.QMainWindow):
                         include_all_unknown_items = True
                     elif cont == QMessageBox.No:
                         return
+                included_unkown_items.append(key)
                 item = excelreader.Item(key, "", "", "", "", "", False)
 
             if not item.record:
@@ -426,10 +430,11 @@ class MainWindow(QtWidgets.QMainWindow):
             for key in item_quantities.keys():
                 try:
                     item = excelreader.ITEMS[key]
+                    if item.record:
+                        continue
                 except KeyError:
-                    continue
-                if item.record:
-                    continue
+                    if key not in included_unkown_items:
+                        continue
                 row_string = f'<h3 style="color:red; background-color:yellow;">[{str(item_quantities[key])}]   -   {key}</h3>'
                 body = body[:item_table_index] + row_string + body[item_table_index:]
                 item_table_index += len(row_string)
@@ -441,7 +446,8 @@ class MainWindow(QtWidgets.QMainWindow):
         processed_tracking_numbers = []
         for shipment in self.selected_entry.data.shipments:
             ignore_key = False
-            for desc in excelreader.IGNORE_LIST["Description"]:  # if key in excelreader.IGNORE_LIST["Description"] was not working.
+            for desc in excelreader.IGNORE_LIST[
+                "Description"]:  # if key in excelreader.IGNORE_LIST["Description"] was not working.
                 if shipment.description == desc:  # I do not understand why.
                     ignore_key = True
                     break
@@ -450,7 +456,7 @@ class MainWindow(QtWidgets.QMainWindow):
             tracking_number = shipment.tracking_number
             if tracking_number in processed_tracking_numbers:
                 continue
-            body = body[:item_table_index]+str(tracking_number)+"<br/>"+body[item_table_index:]
+            body = body[:item_table_index] + str(tracking_number) + "<br/>" + body[item_table_index:]
             tracking_result = self.fedex.track_by_number(tracking_number)
             if not tracking_result.is_valid:
                 invalid_tracking = True
@@ -462,19 +468,19 @@ class MainWindow(QtWidgets.QMainWindow):
                     packages[tracking_result.package.type] = 0
                 packages[tracking_result.package.type] += tracking_result.package.count
             processed_tracking_numbers.append(tracking_number)
-            item_table_index += len(tracking_number+"<br/>")
+            item_table_index += len(tracking_number + "<br/>")
         item_table_index = body.find("<!-- PACKAGES -->")
         for key in packages.keys():
-            row_string ="""
+            row_string = """
             <tr>
                 <td style="background-color:#d9e1f2;"><b><u>%s</u><b></td>
                 <td>%s</td>
             </tr>
-            """%(key, str(packages[key]))
-            body = body[:item_table_index]+row_string+body[item_table_index:]
-            item_table_index+=len(row_string)
+            """ % (key, str(packages[key]))
+            body = body[:item_table_index] + row_string + body[item_table_index:]
+            item_table_index += len(row_string)
         if invalid_tracking:
-            body = '<h3 style="color:red; background-color:yellow;">Some tracking information could not be automatically obtained - please manually enter/verify.</h3><br/>\n'+body
+            body = '<h3 style="color:red; background-color:yellow;">Some tracking information could not be automatically obtained - please manually enter/verify.</h3><br/>\n' + body
         body = body.replace("%DELIVERDATE%", track_date.strftime("%A, %B %d, %Y"))
 
         if not found_record_items:  # Remove record table if no record items
@@ -494,7 +500,8 @@ class MainWindow(QtWidgets.QMainWindow):
                     files_folder + attachment_name)  # This seems a bit unnecessary, but this is the only way to rename an attachment
         mail.Attachments.Add(QFileInfo(files_folder + attachment_name).absoluteFilePath())
         os.remove(files_folder + attachment_name)  # See two lines above
-        mail.Attachments.Add(QFileInfo(files_folder + self.selected_entry.excel_file[:-5] + "_SN.xlsx").absoluteFilePath())
+        mail.Attachments.Add(
+            QFileInfo(files_folder + self.selected_entry.excel_file[:-5] + "_SN.xlsx").absoluteFilePath())
         mail.Save()
         mail.Display(True)
 
