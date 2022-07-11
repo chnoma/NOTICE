@@ -1,22 +1,19 @@
 import datetime
-import sys
 import os
-import shutil
 import re
 import shelve
-import typing
-
-from datetime import date
+import shutil
+import sys
 from dataclasses import dataclass
-import difflib
+from datetime import date
+from pytz import UTC as utc
 
 import fedex_api
+import win32com.client
 from PyQt5 import QtWidgets, uic
+from PyQt5.QtCore import QFileInfo
 from PyQt5.QtGui import QStandardItem, QStandardItemModel
 from PyQt5.QtWidgets import QFileDialog, QMessageBox
-from PyQt5.QtCore import QFileInfo
-
-import win32com.client
 
 import excelreader
 import helper_functions
@@ -431,7 +428,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 item_table_index += len(row_string)
 
         item_table_index = body.find("<!-- TRACKING NUMBERS -->")
-        track_date = date(1970, 1, 1)
+        track_date = utc.localize(datetime.datetime(1970, 1, 1))
         invalid_tracking = False
         packages = {}
         processed_tracking_numbers = []
@@ -447,18 +444,18 @@ class MainWindow(QtWidgets.QMainWindow):
             if tracking_number in processed_tracking_numbers:
                 continue
             body = body[:item_table_index]+str(tracking_number)+"<br/>"+body[item_table_index:]
-            tracking_result = self.fedex.trackbynumber(tracking_number)
-            if not tracking_result.isValid:
+            tracking_result = self.fedex.track_by_number(tracking_number)
+            if not tracking_result.is_valid:
                 invalid_tracking = True
                 continue
-            delivery_date = datetime.datetime.strptime(tracking_result.deliveryDate, "%m/%d/%Y").date()
-            if delivery_date > track_date:
-                track_date = delivery_date
-            if tracking_result.packageType not in packages.keys():
-                packages[tracking_result.packageType] = 0
-            packages[tracking_result.packageType] += tracking_result.quantity
+            if tracking_result.date_delivery > track_date:
+                track_date = tracking_result.date_delivery
+            if tracking_result.package is not None:
+                if tracking_result.package.type not in packages.keys():
+                    packages[tracking_result.package.type] = 0
+                packages[tracking_result.package.type] += tracking_result.package.count
             processed_tracking_numbers.append(tracking_number)
-            item_table_index+=len(tracking_number+"<br/>")
+            item_table_index += len(tracking_number+"<br/>")
         item_table_index = body.find("<!-- PACKAGES -->")
         for key in packages.keys():
             row_string ="""
@@ -492,7 +489,7 @@ class MainWindow(QtWidgets.QMainWindow):
         os.remove(files_folder + attachment_name)  # See two lines above
         mail.Attachments.Add(QFileInfo(files_folder + self.selected_entry.excel_file[:-5] + "_SN.xlsx").absoluteFilePath())
         mail.Save()
-        mail.Display(False)
+        mail.Display(True)
 
 
 if __name__ == "__main__":
