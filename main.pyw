@@ -446,8 +446,7 @@ class MainWindow(QtWidgets.QMainWindow):
         processed_tracking_numbers = []
         for shipment in self.selected_entry.data.shipments:
             ignore_key = False
-            for desc in excelreader.IGNORE_LIST[
-                "Description"]:  # if key in excelreader.IGNORE_LIST["Description"] was not working.
+            for desc in excelreader.IGNORE_LIST["Description"]:  # if key in excelreader.IGNORE_LIST["Description"] was not working.
                 if shipment.description == desc:  # I do not understand why.
                     ignore_key = True
                     break
