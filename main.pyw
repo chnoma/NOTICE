@@ -8,6 +8,8 @@ import sys
 import string
 from dataclasses import dataclass
 from datetime import date
+
+import pandas as pd
 from pytz import UTC as utc
 
 import fedex_api
@@ -44,7 +46,6 @@ STATE_DN_REQUEST_LOADED = 3
 
 # endregion
 
-
 @dataclass
 class Shipment:
     """Dataclass providing info about a given shipment within a Delivery Notification Request"""
@@ -55,8 +56,7 @@ class Shipment:
     ncs_inv: str
     tracking_no: str
     carrier: str
-    ship_date: str
-    delivery_date: str
+    tracking_info: fedex_api.TrackingResult
 
 
 @dataclass
