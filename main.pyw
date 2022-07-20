@@ -126,7 +126,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.po_combobox.activated.connect(self.validate_files)
         self.shipment_project.activated.connect(self.project_selected)
         self.save_cancel_button.pressed.connect(self.save_cancel_pressed)
-        self.generate_email.pressed.connect(self.generate_email)
+        self.generate_email_button.pressed.connect(self.generate_email)
 
         self.missing_dns_load_invoice.pressed.connect(self.browse_ncs_invoice)
 
@@ -319,7 +319,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.facilityNameLineEdit.setEnabled(edit_mode)
         self.oitTextEdit.setEnabled(edit_mode)
         self.emailTextEdit.setEnabled(edit_mode)
-        self.generate_email.setEnabled(edit_mode)
+        self.generate_email_button.setEnabled(edit_mode)
         self.manufacturerLineEdit.setEnabled(edit_mode)
         self.procurementLineEdit.setEnabled(edit_mode)
         self.missing_dns_to.setEnabled(edit_mode)
