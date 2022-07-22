@@ -14,7 +14,7 @@
    <string>NOTICE v0.0.1</string>
   </property>
   <property name="windowIcon">
-   <iconset resource="../../emailer/ui/resources.qrc">
+   <iconset>
     <normaloff>:/icons/email.png</normaloff>:/icons/email.png</iconset>
   </property>
   <widget class="QWidget" name="centralwidget">
@@ -73,7 +73,11 @@
        </layout>
       </item>
       <item>
-       <widget class="QTreeView" name="snowTreeView"/>
+       <widget class="QTreeView" name="snowTreeView">
+        <property name="editTriggers">
+         <set>QAbstractItemView::NoEditTriggers</set>
+        </property>
+       </widget>
       </item>
      </layout>
     </item>
@@ -399,7 +403,7 @@
                <bool>false</bool>
               </property>
               <property name="text">
-               <string>dcross@ncst.com; cchristopher@ncst.com; klawson@ncst.com; LMunroe@ncst.com; danv@colossal-llc.com; k.johnson@colossal-llc.com; a.arnett@colossal-llc.com</string>
+               <string>dcross@ncst.com; cchristopher@ncst.com; klawson@ncst.com; LMunroe@ncst.com; danv@colossal-llc.com; k.johnson@colossal-llc.com; a.arnett@colossal-llc.com; a.bean@colossal-llc.com</string>
               </property>
              </widget>
             </item>
@@ -436,7 +440,10 @@
           <item>
            <widget class="QTableWidget" name="missing_dns_table">
             <property name="enabled">
-             <bool>false</bool>
+             <bool>true</bool>
+            </property>
+            <property name="editTriggers">
+             <set>QAbstractItemView::NoEditTriggers</set>
             </property>
             <column>
              <property name="text">
@@ -487,7 +494,7 @@
       <item>
        <layout class="QHBoxLayout" name="horizontalLayout_6">
         <item>
-         <widget class="QPushButton" name="shipment_generate_email">
+         <widget class="QPushButton" name="generate_email_button">
           <property name="enabled">
            <bool>false</bool>
           </property>

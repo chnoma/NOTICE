@@ -6,8 +6,10 @@ import shelve
 import shutil
 import sys
 import string
+import pickle
 from dataclasses import dataclass
 from datetime import date
+from typing import List
 
 import pandas as pd
 from pytz import UTC as utc
@@ -20,6 +22,7 @@ from PyQt5.QtGui import QStandardItem, QStandardItemModel
 from PyQt5.QtWidgets import QFileDialog, QMessageBox
 
 import excelreader
+import msgExtractor
 import helper_functions
 from helper_functions import code_to_site
 
@@ -42,7 +45,15 @@ STATE_NEW_TASK = 0
 STATE_NEW_DN_REQUEST = 1
 STATE_SHIPPING_NOTIFICATION_LOADED = 2
 STATE_DN_REQUEST_LOADED = 3
+EMAIL_INDEX_FILE = "emailList.pkl"
 
+try:
+    with open(EMAIL_INDEX_FILE, 'rb') as handle:
+        emailIndex = pickle.load(handle)
+except:
+    emailIndex = {}
+print("Parsing emails....\n\n")
+emailIndex = msgExtractor.parseEmails(emailIndex)
 
 # endregion
 
@@ -56,7 +67,6 @@ class Shipment:
     ncs_inv: str
     tracking_no: str
     carrier: str
-    tracking_info: fedex_api.TrackingResult
 
 
 @dataclass
@@ -80,6 +90,11 @@ class DataEntry:
             return 0
         return 1
 
+def jam(d):
+    o = str(d)
+    if o == "None" or o == "nan":
+        return ""
+    return o
 
 class MainWindow(QtWidgets.QMainWindow):
 
@@ -291,10 +306,13 @@ class MainWindow(QtWidgets.QMainWindow):
             self.tab_view.setCurrentWidget(self.shipment_tab)
             self.tab_view.setTabEnabled(1, False)
             edit_mode = True
-        elif state == STATE_DN_REQUEST_LOADED:
-            self.save_cancel_button.setText("Close Shipping Notification Request")
-            self.tab_view.setCurrentWidget(self.shipment_tab)
-            self.tab_view.setTabEnabled(1, False)
+        elif state == STATE_NEW_DN_REQUEST or state == STATE_DN_REQUEST_LOADED:
+            if state == STATE_NEW_DN_REQUEST:
+                self.save_cancel_button.setText("Close Shipping Notification Request")
+            else:
+                self.save_cancel_button.setText("Save As New Entry")
+            self.tab_view.setCurrentWidget(self.missing_dns_tab)
+            self.tab_view.setTabEnabled(0, False)
             edit_mode = True
 
         if not edit_mode:
@@ -336,9 +354,56 @@ class MainWindow(QtWidgets.QMainWindow):
             pass
 
     def browse_ncs_invoice(self):
-        file = QFileDialog.getOpenFileName(self, "QFileDialog.getOpenFileName()", "", "NCS Invoices (*.xlsx)")[0]
-        if file == "":
+        missing_dns: list[Shipment] = []
+        while True:
+            file = QFileDialog.getOpenFileName(self, "QFileDialog.getOpenFileName()", "", "NCS Invoices (*.xlsx)")[0]
+            if file == "":
+                break
+            missing_delivery_notifications = self.identify_missing_dns(file)
+            for dn in missing_delivery_notifications:
+                missing_shipment = Shipment(
+                    project="N/A",
+                    location_code=dn["site"],
+                    location_name=dn["area"],
+                    ncs_so=dn["ncs_so"],
+                    ncs_inv=dn["ncs_inv"],
+                    tracking_no=dn["tracking#"],
+                    carrier=dn["carrier"])
+                missing_dns.append(missing_shipment)
+            cont = QMessageBox.question(self, 'Continue?',
+                                        f'{len(missing_delivery_notifications)} missing DNs found.\nWould you like to add more?',
+                                        QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+            if cont == QMessageBox.No:
+                break
+        
+        if len(missing_dns) == 0:
             return
+        
+        with open(f"./settings/dnRequestTemplate.htm") as fin:
+            body = fin.read()
+
+        item_table_index = body.find("<!-- RECORD ITEMS -->") + len("<!-- RECORD ITEMS -->")
+        for dn in missing_dns:
+            row_string = f"""
+            <tr>
+            <td>{dn.location_code}</td>
+            <td>{dn.location_name}</td>
+            <td>{dn.ncs_so}</td>
+            <td>{dn.ncs_inv}</td>
+            <td>{dn.tracking_no}</td>
+            <td>{dn.carrier}</td>
+            </tr>"""
+            body = body[:item_table_index] + row_string + body[item_table_index:]
+            item_table_index += len(row_string)
+
+        outlook = win32com.client.Dispatch("outlook.application")
+        mail = outlook.CreateItem(0)
+        mail.To = self.missing_dns_to.text()
+        mail.Cc = self.missing_dns_cc.text()
+        mail.Subject = "Missing Delivery Notifications for Supporting Technologies"
+        mail.HtmlBody = body
+        mail.Save()
+        mail.Display(False)
         self.set_application_state(STATE_DN_REQUEST_LOADED)
 
     def browse_po(self):
@@ -530,6 +595,152 @@ class MainWindow(QtWidgets.QMainWindow):
         self.save_data_entry_changes()
         self.set_application_state(STATE_NEW_TASK)
         self.reload_items()
+
+    def identify_missing_dns(self, file):
+        try:
+            coverpage = pd.read_excel(file, sheet_name="Invoice", header=None)
+        except:
+            try:
+                coverpage = pd.read_excel(file, sheet_name="INVOICE", header=None)
+            except:
+                pass
+
+        trackingNumbers = {}
+        foundClins = False
+        container = []
+        trackingColumn = -1
+        trackingColumn2 = -1
+        carrierColumn = -1
+        carrierColumn2 = -1
+        ncsSoColumn = -1
+        ncsInvColumn = -1
+        qtyColumn = -1
+        trackingAndCarrierColumn = False
+        trackingAndCarrierColumn2 = False
+        foundTrackingColumn = False
+        foundCarrierColumn = False
+        foundTrackingColumn2 = False
+        foundCarrierColumn2 = False
+        foundNcsSoColumn = False
+        foundNcsInvColumn = False
+        foundQtyColumn = False
+        for k, v in enumerate(coverpage[0]):
+            sv = str(v)
+            if not foundClins:
+                if sv == "CLIN":
+                    foundClins = True
+                    for column in coverpage:
+                        columnValue = str(coverpage[column][k]).lower()
+                        if not foundTrackingColumn and "tracking" in columnValue:
+                            foundTrackingColumn = True
+                            trackingColumn = column
+                            if "carrier" in columnValue:
+                                carrierColumn = column
+                                trackingAndCarrierColumn = True
+                        elif not foundCarrierColumn and "carrier" in columnValue:
+                            foundCarrierColumn = True
+                            carrierColumn = column
+                            if "tracking" in columnValue:
+                                trackingColumn = column
+                                trackingAndCarrierColumn = True
+                        elif not foundTrackingColumn2 and "tracking" in columnValue:
+                            foundTrackingColumn2 = True
+                            trackingColumn2 = column
+                            if "carrier" in columnValue:
+                                carrierColumn2 = column
+                                trackingAndCarrierColumn2 = True
+                        elif not foundCarrierColumn2 and "carrier" in columnValue:
+                            foundCarrierColumn2 = True
+                            carrierColumn2 = column
+                            if "tracking" in columnValue:
+                                trackingColumn2 = column
+                                trackingAndCarrierColumn2 = True
+                        elif not foundNcsSoColumn and ("ncs so" in columnValue or "ncs_so" in columnValue):
+                            foundNcsSoColumn = True
+                            ncsSoColumn = column
+                        elif not foundNcsInvColumn and ("ncs inv" in columnValue or "ncs_inv" in columnValue):
+                            foundNcsInvColumn = True
+                            ncsInvColumn = column
+                        elif not foundQtyColumn and "qty" in columnValue:
+                            foundQtyColumn = True
+                            qtyColumn = column
+                    if foundTrackingColumn:
+                        print("Found Tracking column at: " + str(trackingColumn))
+                    else:
+                        print("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\nNO TRACKING COLUMN FOUND\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
+                    if foundCarrierColumn:
+                        print("Found Carrier column at: " + str(carrierColumn))
+                    else:
+                        print("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\nNO CARRIER COLUMN FOUND\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
+                    if foundTrackingColumn2:
+                        print("Found second tracking column at: " + str(trackingColumn2))
+                    if foundCarrierColumn2:
+                        print("Found second carrier column at: " + str(carrierColumn2))
+                    if trackingAndCarrierColumn:
+                        print("Found tracking and carrier (combined) column at: " + str(trackingColumn))
+                    if trackingAndCarrierColumn:
+                        print("Found second tracking and carrier (combined) column at: " + str(trackingColumn2))
+                    if foundNcsSoColumn:
+                        print("Found NCS SO# column at: " + str(ncsSoColumn))
+                    else:
+                        print("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\nNO NCS SO# COLUMN FOUND\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
+                    if foundNcsInvColumn:
+                        print("Found NCS INV# column at: " + str(ncsInvColumn))
+                    else:
+                        print("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\nNO NCS INV# COLUMN FOUND\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
+                    if foundQtyColumn:
+                        print("Found QTY column at: " + str(qtyColumn))
+                    else:
+                        print("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\nNO QTY COLUMN FOUND\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
+                else:
+                    continue
+            if sv == "CLIN":
+                continue
+            if pd.isna(v):
+                trackingNo = str(coverpage[trackingColumn][k]).replace(" ", "")
+                if trackingNo not in trackingNumbers.keys():
+                    trackingNumbers[trackingNo] = {}
+                    trackingNumbers[trackingNo]["clins"] = []
+                    trackingNumbers[trackingNo]["tracking#"] = trackingNo
+                    trackingNumbers[trackingNo]["carrier"] = str(coverpage[carrierColumn][k]).upper()
+                    trackingNumbers[trackingNo]["ncs_so"] = jam(coverpage[ncsSoColumn][k])
+                    trackingNumbers[trackingNo]["ncs_inv"] = jam(coverpage[ncsInvColumn][k])
+                trackingNumbers[trackingNo]["site"] = container[0]["site"]
+                trackingNumbers[trackingNo]["area"] = container[0]["area"]
+                for data in container:
+                    trackingNumbers[trackingNo]["clins"].append(data)
+                container = []
+            else:
+                currentData = {}
+                currentData["clin"] = sv
+                currentData["site"] = coverpage[1][k][:coverpage[1][k].find("-")]
+                currentData["area"] = coverpage[1][k][coverpage[1][k].find("-") + 1:]
+                currentData["qty"] = int(coverpage[qtyColumn][k])
+                container.append(currentData)
+
+        for tracking in trackingNumbers.items():
+            shipment = tracking[1]
+            shipment["ignore"] = False
+            if shipment["tracking#"].upper() == "WARRANTY" or shipment["tracking#"].upper() == "ELECTRONIC":
+                shipment["carrier"] = shipment["tracking#"]
+                shipment["reportDate"] = "N/A"
+                shipment["sendDate"] = "N/A"
+                shipment["estDelivery"] = "N/A"
+                shipment["found"] = True
+                shipment["ignore"] = True
+                continue
+        missing_dns = []
+        for trackingNumber in trackingNumbers.keys():
+            shipment = trackingNumbers[trackingNumber]
+            if shipment["ignore"]:
+                print(f"Shipment {shipment['tracking#']} is electronic - no notification necessary")
+                continue
+            if msgExtractor.findEmail(trackingNumber, emailIndex) is None:
+                shipment["found"] = False
+                shipment["notificationFile"] = "NOT FOUND"
+                missing_dns.append(shipment)
+        return missing_dns
+
 
 
 if __name__ == "__main__":
